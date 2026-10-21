@@ -63,6 +63,10 @@ agent/bin/pinglume resume --data-dir .dev-data
 
 Para simular uma falha, rode o servidor com `-fault close -fault-after 30s`: a escuta fecha e as sondas passam a registrar `refused`.
 
+## Desenvolvimento
+
+Branches, versionamento (SemVer) e convenção de commits: [docs/fluxo-git.md](docs/fluxo-git.md). Histórico de versões: [CHANGELOG.md](CHANGELOG.md).
+
 ## Limites conhecidos
 
 - Só a sonda TCP existe; DNS, HTTPS e UDP chegam em F5 e F12.
