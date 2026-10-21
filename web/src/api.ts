@@ -45,6 +45,52 @@ export interface Status {
   };
 }
 
+export interface Bucket {
+  t: number; // início do balde, ms desde a época
+  n: number;
+  ok: number;
+  fail?: Record<string, number>;
+  p50Us: number | null;
+  p95Us: number | null;
+  maxUs: number | null;
+}
+
+export interface Series {
+  probeDefId: string;
+  endpoint: string;
+  kind: string;
+  protocolVersion: number;
+  target: string;
+  intervalMs: number;
+  buckets: Bucket[];
+}
+
+export interface CoverageInterval {
+  start: string;
+  end: string;
+  state: CoverageState;
+  reason: string;
+  open: boolean;
+}
+
+export interface Timeline {
+  from: string;
+  to: string;
+  bucketMs: number;
+  series: Series[];
+  coverage: CoverageInterval[];
+  events: { at: string; kind: string; detail: string }[];
+}
+
+/** Intervalo pedido à API: relativo a agora ou absoluto. */
+export type RangeQuery = { window: string } | { from: Date; to: Date };
+
+function rangeParams(r: RangeQuery): string {
+  return "window" in r
+    ? `window=${encodeURIComponent(r.window)}`
+    : `from=${encodeURIComponent(r.from.toISOString())}&to=${encodeURIComponent(r.to.toISOString())}`;
+}
+
 /** Por que uma chamada falhou, do ponto de vista de quem usa o dashboard. */
 export type FailureKind = "unauthenticated" | "offline" | "error";
 
@@ -82,7 +128,9 @@ async function call<T>(method: "GET" | "POST", path: string): Promise<T> {
 }
 
 export const api = {
-  status: (window: string) => call<Status>("GET", `/api/v1/status?window=${encodeURIComponent(window)}`),
+  status: (r: RangeQuery) => call<Status>("GET", `/api/v1/status?${rangeParams(r)}`),
+  timeline: (r: RangeQuery, buckets: number) =>
+    call<Timeline>("GET", `/api/v1/timeline?${rangeParams(r)}&buckets=${buckets}`),
   pause: () => call<{ state: CoverageState }>("POST", "/api/v1/pause"),
   resume: () => call<{ state: CoverageState }>("POST", "/api/v1/resume"),
 };

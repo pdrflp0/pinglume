@@ -271,3 +271,19 @@ func TestTokenFile(t *testing.T) {
 		t.Fatal("token legível por outros usuários deveria ser recusado")
 	}
 }
+
+func TestTimelineValidation(t *testing.T) {
+	e := newEnv(t)
+	if w := e.do("GET", "/api/v1/timeline"); w.Code != http.StatusUnauthorized {
+		t.Fatalf("sem auth: %d", w.Code)
+	}
+	if w := e.do("GET", "/api/v1/timeline", e.bearer()); w.Code != 200 {
+		t.Fatalf("padrão: %d %s", w.Code, w.Body)
+	}
+	for _, q := range []string{"?from=ontem", "?buckets=5", "?buckets=5000",
+		"?from=2026-10-01T00:00:00Z&to=2026-10-20T00:00:00Z", "?from=2026-10-20T00:00:00Z&to=2026-10-20T00:00:01Z"} {
+		if w := e.do("GET", "/api/v1/timeline"+q, e.bearer()); w.Code != http.StatusBadRequest {
+			t.Errorf("%s: esperava 400, veio %d", q, w.Code)
+		}
+	}
+}

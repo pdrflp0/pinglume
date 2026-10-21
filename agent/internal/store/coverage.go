@@ -143,3 +143,21 @@ func (s *Store) SetState(ctx context.Context, key, value string) error {
 		ON CONFLICT (key) DO UPDATE SET value = excluded.value`, key, value)
 	return err
 }
+
+// ExtendLive estende o intervalo aberto até liveUntil (limitado a "to"). Só o
+// agente em execução pode afirmar que continuou no estado até agora; quem lê
+// o banco de fora passa liveUntil zero e o intervalo fica no último heartbeat.
+func ExtendLive(ivs []Interval, liveUntil, to time.Time) []Interval {
+	if liveUntil.IsZero() {
+		return ivs
+	}
+	if liveUntil.After(to) {
+		liveUntil = to
+	}
+	for i := range ivs {
+		if ivs[i].Open && liveUntil.After(ivs[i].End) {
+			ivs[i].End = liveUntil
+		}
+	}
+	return ivs
+}

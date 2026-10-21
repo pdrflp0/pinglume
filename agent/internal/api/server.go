@@ -13,6 +13,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"net"
 	"net/http"
@@ -22,6 +23,7 @@ import (
 
 	"pinglume/agent/internal/store"
 	"pinglume/agent/internal/summary"
+	"pinglume/agent/internal/timeline"
 )
 
 const sessionCookie = "pinglume_session"
@@ -55,6 +57,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/v1/auth/codes", s.require(tokenOnly, s.handleNewCode))
 	mux.Handle("POST /api/v1/auth/logout", s.require(anyAuth, s.handleLogout))
 	mux.Handle("GET /api/v1/status", s.require(anyAuth, s.handleStatus))
+	mux.Handle("GET /api/v1/timeline", s.require(anyAuth, s.handleTimeline))
 	mux.Handle("POST /api/v1/pause", s.require(anyAuth, s.handlePause(true)))
 	mux.Handle("POST /api/v1/resume", s.require(anyAuth, s.handlePause(false)))
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
@@ -191,22 +194,75 @@ type statusResponse struct {
 }
 
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
-	window := 15 * time.Minute
-	if v := r.URL.Query().Get("window"); v != "" {
-		d, err := time.ParseDuration(v)
-		if err != nil || d < time.Minute || d > 7*24*time.Hour {
-			writeError(w, http.StatusBadRequest, "window deve ser uma duração entre 1m e 168h")
-			return
-		}
-		window = d
+	from, to, ok := s.parseRange(w, r, 15*time.Minute, time.Minute)
+	if !ok {
+		return
 	}
-	now := s.Now()
-	sum, err := summary.Build(r.Context(), s.Store, now.Add(-window), now, summary.Options{LiveUntil: now})
+	sum, err := summary.Build(r.Context(), s.Store, from, to, summary.Options{LiveUntil: s.Now()})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "falha ao ler o histórico")
 		return
 	}
-	writeJSON(w, http.StatusOK, statusResponse{AgentVersion: s.Version, State: s.Ctl.State(), Now: now, Summary: sum})
+	writeJSON(w, http.StatusOK, statusResponse{AgentVersion: s.Version, State: s.Ctl.State(), Now: s.Now(), Summary: sum})
+}
+
+// parseRange lê window=<duração> (relativo a agora) ou from/to (RFC 3339).
+// O fim nunca passa de agora: o futuro não tem medição nem lacuna.
+func (s *Server) parseRange(w http.ResponseWriter, r *http.Request, def, minSpan time.Duration) (time.Time, time.Time, bool) {
+	q := r.URL.Query()
+	now := s.Now()
+	from, to := now.Add(-def), now
+	if v := q.Get("window"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "window deve ser uma duração, ex.: 15m")
+			return from, to, false
+		}
+		from = now.Add(-d)
+	}
+	for _, p := range []struct {
+		name string
+		dst  *time.Time
+	}{{"from", &from}, {"to", &to}} {
+		if v := q.Get(p.name); v != "" {
+			t, err := time.Parse(time.RFC3339Nano, v)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, p.name+" deve estar em RFC 3339")
+				return from, to, false
+			}
+			*p.dst = t
+		}
+	}
+	if to.After(now) {
+		to = now
+	}
+	if span := to.Sub(from); span < minSpan || span > 8*24*time.Hour {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("o intervalo deve ter entre %s e 8 dias", minSpan))
+		return from, to, false
+	}
+	return from, to, true
+}
+
+// handleTimeline devolve a série agregada do intervalo pedido (padrão: 15 min).
+func (s *Server) handleTimeline(w http.ResponseWriter, r *http.Request) {
+	from, to, ok := s.parseRange(w, r, 15*time.Minute, 10*time.Second)
+	if !ok {
+		return
+	}
+	n := 300
+	if v := r.URL.Query().Get("buckets"); v != "" {
+		var err error
+		if n, err = strconv.Atoi(v); err != nil || n < 10 || n > 1000 {
+			writeError(w, http.StatusBadRequest, "buckets deve estar entre 10 e 1000")
+			return
+		}
+	}
+	tl, err := timeline.Build(r.Context(), s.Store, from, to, n, s.Now())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "falha ao ler o histórico")
+		return
+	}
+	writeJSON(w, http.StatusOK, tl)
 }
 
 func (s *Server) handlePause(pause bool) http.HandlerFunc {

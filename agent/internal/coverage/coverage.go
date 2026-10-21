@@ -53,10 +53,17 @@ func (t *Tracker) Start(ctx context.Context, initial string) ([]Detection, error
 	var hasLast bool
 	reason, detectedBy := "agente não estava em execução", "startup_gap"
 	if open != nil {
-		// Intervalo ainda aberto: a execução anterior morreu sem encerrar.
+		// Intervalo ainda aberto: a execução anterior morreu sem encerrar. A
+		// última evidência de vida é o heartbeat ou a última observação gravada
+		// depois dele, o que for mais recente.
 		lastAlive, hasLast = open.End, true
-		closeAt = open.End
-		reason, detectedBy = "encerramento inesperado do agente; último heartbeat registrado é o limite conhecido", "startup_open_interval"
+		if obsAt, ok, err := t.Store.LastObservationAt(ctx, t.DeviceID); err != nil {
+			return nil, err
+		} else if ok && obsAt.After(lastAlive) && !obsAt.After(now) {
+			lastAlive = obsAt
+		}
+		closeAt = lastAlive
+		reason, detectedBy = "encerramento inesperado do agente; o início é a última evidência de vida registrada (heartbeat ou medição)", "startup_open_interval"
 	} else if lastAlive, hasLast, err = t.Store.LastIntervalEnd(ctx, t.DeviceID); err != nil {
 		return nil, err
 	}
