@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+jobs:
+  agent:
+    name: Agente e probe-server (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # macOS é a plataforma de referência; Linux garante que nada depende só dela.
+        os: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: agent/go.mod
+          cache-dependency-path: agent/go.sum
+      - name: gofmt
+        run: test -z "$(gofmt -l agent probe-server)" || (gofmt -l agent probe-server; exit 1)
+      - name: vet
+        run: make vet
+      - name: testes do agente (com detector de corrida)
+        working-directory: agent
+        run: go test -race -count=1 ./...
+
+  web:
+    name: Dashboard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --no-audit --no-fund
+        working-directory: web
+      - run: npm run typecheck
+        working-directory: web
+      - run: npm test
+        working-directory: web
+      - run: npx vite build --outDir "$RUNNER_TEMP/web-dist"
+        working-directory: web
