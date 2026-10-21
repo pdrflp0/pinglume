@@ -61,15 +61,15 @@ func TestPauseStopsMeasuringAndSurvivesRestart(t *testing.T) {
 		store.ProbeDefinition{Kind: "tcp", Target: p.Addr, Interval: 20 * time.Millisecond, Timeout: p.Timeout, ProtocolVersion: 1}, clk.Now())
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-	newRunner := func(pause, resume chan struct{}, states chan string) *Runner {
+	newRunner := func(ctl chan Command, states chan string) *Runner {
 		return &Runner{
 			Store:     st,
 			Tracker:   &coverage.Tracker{Store: st, Clock: clk, DeviceID: dev.ID, Heartbeat: 50 * time.Millisecond},
 			Scheduler: &sched.Scheduler{Store: st, Clock: clk, DeviceID: dev.ID, Concurrency: 2, Jitter: 0.1, Log: log},
 			Jobs:      []sched.Job{{Def: def, Prober: p}},
 			Log:       log,
-			Pause:     pause, Resume: resume,
-			OnState: func(s string) { states <- s },
+			Control:   ctl,
+			OnState:   func(s string) { states <- s },
 		}
 	}
 	waitState := func(states chan string, want string) time.Duration {
@@ -86,15 +86,25 @@ func TestPauseStopsMeasuringAndSurvivesRestart(t *testing.T) {
 		return time.Since(start)
 	}
 
-	pause, resume, states := make(chan struct{}), make(chan struct{}), make(chan string, 4)
+	ctl, states := make(chan Command), make(chan string, 4)
+	send := func(pause bool) {
+		t.Helper()
+		done := make(chan error, 1)
+		ctl <- Command{Pause: pause, Done: done}
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
+	}
 	runCtx, cancel := context.WithCancel(ctx)
 	done := make(chan error, 1)
-	go func() { done <- newRunner(pause, resume, states).Run(runCtx) }()
+	go func() { done <- newRunner(ctl, states).Run(runCtx) }()
 	waitState(states, coverage.Measuring)
 	time.Sleep(200 * time.Millisecond)
 
-	pause <- struct{}{}
-	if d := waitState(states, coverage.Paused); d > time.Second {
+	t0 := time.Now()
+	send(true)
+	waitState(states, coverage.Paused)
+	if d := time.Since(t0); d > time.Second {
 		t.Fatalf("pausa levou %s (limite 1 s)", d)
 	}
 	pausedAt := time.Now()
@@ -110,14 +120,14 @@ func TestPauseStopsMeasuringAndSurvivesRestart(t *testing.T) {
 	}
 	runCtx, cancel = context.WithCancel(ctx)
 	defer cancel()
-	go func() { done <- newRunner(pause, resume, states).Run(runCtx) }()
+	go func() { done <- newRunner(ctl, states).Run(runCtx) }()
 	waitState(states, coverage.Paused)
 	time.Sleep(150 * time.Millisecond)
 	if n := total(t, st, pausedAt); n != 0 {
 		t.Fatalf("%d medições após reinício pausado", n)
 	}
 
-	resume <- struct{}{}
+	send(false)
 	waitState(states, coverage.Measuring)
 	resumedAt := time.Now()
 	time.Sleep(300 * time.Millisecond)

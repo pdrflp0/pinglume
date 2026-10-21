@@ -6,6 +6,7 @@ package runner
 import (
 	"context"
 	"log/slog"
+	"sync/atomic"
 	"time"
 
 	"pinglume/agent/internal/coverage"
@@ -22,10 +23,24 @@ type Runner struct {
 	Jobs      []sched.Job
 	Log       *slog.Logger
 
-	// Pause e Resume recebem pedidos (no binário, vindos de sinais).
-	Pause, Resume <-chan struct{}
+	// Control recebe pedidos de pausa/retomada (da API local). Cada pedido é
+	// respondido em Done depois que o novo estado foi aplicado e gravado.
+	Control <-chan Command
 	// OnState, se definido, é chamado após cada mudança de estado (testes).
 	OnState func(state string)
+
+	state atomic.Value // string
+}
+
+type Command struct {
+	Pause bool
+	Done  chan<- error
+}
+
+// State devolve o estado atual de cobertura; seguro para outras goroutines.
+func (r *Runner) State() string {
+	v, _ := r.state.Load().(string)
+	return v
 }
 
 func (r *Runner) Run(ctx context.Context) error {
@@ -81,29 +96,33 @@ func (r *Runner) Run(ctx context.Context) error {
 			}
 			r.logDetections(dets)
 
-		case <-r.Pause:
-			if r.Tracker.State() == coverage.Paused {
-				continue
-			}
-			if stopSched != nil {
-				stopSched()
-			}
-			if err := r.setPaused(ctx, true); err != nil {
-				return err
-			}
-			r.Log.Info("medição pausada")
-
-		case <-r.Resume:
-			if r.Tracker.State() != coverage.Paused {
-				continue
-			}
-			if err := r.setPaused(ctx, false); err != nil {
-				return err
-			}
-			start()
-			r.Log.Info("medição retomada")
+		case cmd := <-r.Control:
+			cmd.Done <- r.apply(ctx, cmd.Pause, start, &stopSched)
 		}
 	}
+}
+
+func (r *Runner) apply(ctx context.Context, pause bool, start func(), stopSched *func()) error {
+	paused := r.Tracker.State() == coverage.Paused
+	if pause == paused {
+		return nil
+	}
+	if pause {
+		if *stopSched != nil {
+			(*stopSched)()
+		}
+		if err := r.setPaused(ctx, true); err != nil {
+			return err
+		}
+		r.Log.Info("medição pausada")
+		return nil
+	}
+	if err := r.setPaused(ctx, false); err != nil {
+		return err
+	}
+	start()
+	r.Log.Info("medição retomada")
+	return nil
 }
 
 func (r *Runner) setPaused(ctx context.Context, paused bool) error {
@@ -122,6 +141,7 @@ func (r *Runner) setPaused(ctx context.Context, paused bool) error {
 }
 
 func (r *Runner) notify(state string) {
+	r.state.Store(state)
 	if r.OnState != nil {
 		r.OnState(state)
 	}

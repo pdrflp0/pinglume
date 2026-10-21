@@ -6,3 +6,6 @@ bin/
 node_modules/
 dist/
 .DS_Store
+
+agent/internal/webui/static/*
+!agent/internal/webui/static/README

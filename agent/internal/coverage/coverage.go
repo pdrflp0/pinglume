@@ -74,8 +74,12 @@ func (t *Tracker) Start(ctx context.Context, initial string) ([]Detection, error
 			dets = append(dets, Detection{Kind: "clock_jump", Detail: detail})
 		}
 	}
+	startReason := ""
+	if initial == Paused {
+		startReason = "pausa pelo usuário, mantida após reinício do agente"
+	}
 	if _, err := t.Store.Transition(ctx, t.DeviceID, closeAt, gaps,
-		&store.Interval{Start: now, State: initial, DetectedBy: "agent"}); err != nil {
+		&store.Interval{Start: now, State: initial, Reason: startReason, DetectedBy: "agent"}); err != nil {
 		return nil, err
 	}
 	t.state, t.prevWall, t.prevMono = initial, now, t.Clock.Mono()

@@ -34,25 +34,3 @@ func Acquire(path string) (*Lock, error) {
 
 // Release libera a trava. O sistema também a libera se o processo morrer.
 func (l *Lock) Release() error { return l.f.Close() }
-
-// HolderPID devolve o PID do agente que detém a trava. Se a trava estiver
-// livre, nenhum agente está rodando e devolve ok=false — isso evita sinalizar
-// um PID reaproveitado por outro processo.
-func HolderPID(path string) (pid int, ok bool, err error) {
-	f, err := os.Open(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return 0, false, nil
-	}
-	if err != nil {
-		return 0, false, err
-	}
-	defer f.Close()
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_SH|syscall.LOCK_NB); err == nil {
-		syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
-		return 0, false, nil
-	}
-	if _, err := fmt.Fscan(f, &pid); err != nil {
-		return 0, false, fmt.Errorf("arquivo de trava ilegível: %w", err)
-	}
-	return pid, true, nil
-}
