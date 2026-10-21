@@ -202,3 +202,31 @@ func TestPauseResume(t *testing.T) {
 		t.Fatalf("estados = %v", got)
 	}
 }
+
+// Medições gravadas depois do último heartbeat também provam que o agente
+// estava vivo: a lacuna do crash começa na mais recente delas.
+func TestCrashGapStartsAtLastObservation(t *testing.T) {
+	ctx := context.Background()
+	st, dev, clk := setup(t)
+	tr := newTracker(st, dev, clk)
+	tr.Start(ctx, Measuring)
+	heartbeats(t, tr, clk, 2)
+	pd, _ := st.EnsureProbeDefinition(ctx, store.Endpoint{Label: "ep", Host: "h", Owner: "dev"},
+		store.ProbeDefinition{Kind: "tcp", Target: "h:1", Interval: time.Second, Timeout: time.Millisecond, ProtocolVersion: 1}, t0)
+	obsAt := clk.Now().Add(3 * time.Second) // entre o último heartbeat e o crash
+	st.InsertObservation(ctx, store.Observation{ID: "o1", DeviceID: dev, ProbeDefID: pd.ID, Seq: 1,
+		StartedWall: obsAt, Status: "ok", ReceivedAt: obsAt})
+
+	clk.Advance(time.Minute)
+	dets, err := newTracker(st, dev, clk).Start(ctx, Measuring)
+	if err != nil || len(dets) != 1 {
+		t.Fatalf("%+v %v", dets, err)
+	}
+	if !dets[0].Interval.Start.Equal(obsAt.Truncate(time.Millisecond)) {
+		t.Fatalf("lacuna começa em %s, esperava %s", dets[0].Interval.Start, obsAt)
+	}
+	ivs := intervals(t, st)
+	if !ivs[0].End.Equal(ivs[1].Start) {
+		t.Fatalf("medição anterior deveria terminar onde a lacuna começa: %+v", ivs)
+	}
+}

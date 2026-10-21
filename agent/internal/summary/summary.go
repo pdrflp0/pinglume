@@ -62,14 +62,9 @@ func Build(ctx context.Context, st *store.Store, from, to time.Time, opt Options
 	if err != nil {
 		return s, err
 	}
+	ivs = store.ExtendLive(ivs, opt.LiveUntil, to)
 	var covered, measuring time.Duration
 	for _, iv := range ivs {
-		if iv.Open && !opt.LiveUntil.IsZero() && opt.LiveUntil.After(iv.End) {
-			iv.End = opt.LiveUntil
-			if iv.End.After(to) {
-				iv.End = to
-			}
-		}
 		d := iv.Duration()
 		s.StateMS[iv.State] += d.Milliseconds()
 		covered += d

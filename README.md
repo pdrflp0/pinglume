@@ -12,7 +12,8 @@ Ferramenta local para investigar falhas intermitentes de internet durante chamad
 | F1 sonda TCP → SQLite → `pinglume status` | feito e testado |
 | F2 cobertura: heartbeat, agente parado, suspensão, pausa | feito; suspensão testada só com relógio simulado |
 | F3 API local segura + dashboard servido pelo agente | feito e testado |
-| F4 em diante | ver backlog no documento de desenho |
+| F4 linha do tempo com lacunas, zoom, teclado e tabela equivalente | feito e testado |
+| F5 em diante | ver backlog no documento de desenho |
 
 ## Rodar localmente
 
@@ -62,13 +63,19 @@ agent/bin/pinglume resume --data-dir .dev-data
 
 Para simular uma falha, rode o servidor com `-fault close -fault-after 30s`: a escuta fecha e as sondas passam a registrar `refused`.
 
+## Desenvolvimento
+
+Branches, versionamento (SemVer) e convenção de commits: [docs/fluxo-git.md](docs/fluxo-git.md). Histórico de versões: [CHANGELOG.md](CHANGELOG.md).
+
 ## Limites conhecidos
 
 - Só a sonda TCP existe; DNS, HTTPS e UDP chegam em F5 e F12.
 - Alvos de desenvolvimento precisam ser loopback ou rede privada; o agente recusa outros.
 - A detecção de suspensão compara relógio civil e monotônico. Ela não distingue sono de relógio adiantado manualmente (o motivo registrado diz isso) e ainda não foi validada com o Mac dormindo de verdade.
 - Depois de um crash, a lacuna começa no último heartbeat (a cada 5 s): o instante exato da queda tem até 5 s de incerteza.
-- O dashboard de F3 mostra resumo e lacunas; a linha do tempo com zoom é F4.
+- A linha do tempo usa escala linear compartilhada entre as sondas: um pico grande achata as demais. Escala logarítmica fica para depois do uso real.
+- Os trechos (baldes) têm tamanho período ÷ 300; em 7 dias, cada trecho cobre ~34 min e a mediana esconde picos curtos dentro dele.
+- Eventos do sistema (início/parada do agente) já vêm da API, mas ainda não aparecem como marcas no gráfico.
 - Sessões do navegador ficam em memória: reiniciar o agente exige `pinglume open` de novo.
 - Em largura de celular, a tabela de sondas rola horizontalmente dentro do cartão.
 - Nenhum número de desempenho foi publicado; medições de recursos são a fatia F11.

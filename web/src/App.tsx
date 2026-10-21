@@ -1,39 +1,39 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { api, ApiError, type CoverageState, type FailureKind, type Status } from "./api";
+import { api, ApiError, type CoverageState, type FailureKind, type Status, type Timeline as TimelineData } from "./api";
+import { DataTable } from "./DataTable";
 import { clock, duration, failureLabel, latency, percent, stateLabel, stateOrder } from "./format";
-
-const WINDOWS = [
-  { value: "15m", label: "15 min" },
-  { value: "1h", label: "1 h" },
-  { value: "6h", label: "6 h" },
-  { value: "24h", label: "24 h" },
-] as const;
+import { pan, PRESETS, resolve, select, toQuery, zoom, type ViewRange } from "./range";
+import { rangeLabel } from "./scale";
+import { Timeline } from "./Timeline";
 
 const POLL_MS = 5000;
+const BUCKETS = 300;
 
 interface Load {
-  data: Status | null;
+  status: Status | null;
+  timeline: TimelineData | null;
   failure: { kind: FailureKind; message: string; since: Date } | null;
   loading: boolean;
 }
 
-function useStatus(period: string) {
-  const [load, setLoad] = useState<Load>({ data: null, failure: null, loading: true });
+function useDashboard(range: ViewRange) {
+  const [load, setLoad] = useState<Load>({ status: null, timeline: null, failure: null, loading: true });
 
   const refresh = useCallback(async () => {
+    const q = toQuery(range);
     try {
-      const data = await api.status(period);
-      setLoad({ data, failure: null, loading: false });
+      const [status, timeline] = await Promise.all([api.status(q), api.timeline(q, BUCKETS)]);
+      setLoad({ status, timeline, failure: null, loading: false });
     } catch (e) {
       const err = e instanceof ApiError ? e : new ApiError("error", String(e));
       // Mantém a última leitura boa e o instante da primeira falha.
       setLoad((prev) => ({
-        data: prev.data,
+        ...prev,
         failure: { kind: err.kind, message: err.message, since: prev.failure?.since ?? new Date() },
         loading: false,
       }));
     }
-  }, [period]);
+  }, [range]);
 
   useEffect(() => {
     refresh();
@@ -45,8 +45,8 @@ function useStatus(period: string) {
 }
 
 export function App() {
-  const [period, setPeriod] = useState<string>("15m");
-  const { data, failure, loading, refresh } = useStatus(period);
+  const [range, setRange] = useState<ViewRange>({ live: true, spanMs: PRESETS[0].spanMs });
+  const { status: data, timeline, failure, loading, refresh } = useDashboard(range);
   const [busy, setBusy] = useState(false);
   const [announcement, setAnnouncement] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
@@ -82,6 +82,8 @@ export function App() {
 
   const offline = failure !== null;
   const paused = data.state === "paused";
+  const now = Date.parse(data.now);
+  const shown = resolve(range, now);
 
   return (
     <div className="page">
@@ -114,15 +116,36 @@ export function App() {
         </div>
       )}
 
+      <RangeBar
+        range={range}
+        label={rangeLabel(shown.from, shown.to)}
+        onChange={setRange}
+        onZoom={(f) => setRange(zoom(range, now, f))}
+        onPan={(f) => setRange(pan(range, now, f))}
+      />
+
       <main>
+        <section aria-labelledby="tl-title" className="card">
+          <h2 id="tl-title">Linha do tempo</h2>
+          {timeline && (
+            <>
+              <Timeline
+                data={timeline}
+                onSelect={(a, b) => setRange(select(a, b, now))}
+                onZoom={(f, c) => setRange(zoom(range, now, f, c))}
+                onPan={(f) => setRange(pan(range, now, f))}
+                onLive={() => setRange({ live: true, spanMs: PRESETS[0].spanMs })}
+              />
+              <DataTable data={timeline} />
+            </>
+          )}
+        </section>
+
         <section aria-labelledby="cov-title" className="card">
-          <div className="card-head">
-            <h2 id="cov-title">Cobertura</h2>
-            <WindowPicker value={period} onChange={setPeriod} />
-          </div>
+          <h2 id="cov-title">Cobertura</h2>
           <p className="muted">
-            {clock(data.summary.from)} – {clock(data.summary.to)}. Tempo em que o agente estava (ou não) medindo.
-            Período sem medição não indica conexão boa nem queda.
+            Tempo em que o agente estava (ou não) medindo no período exibido. Período sem medição não indica conexão
+            boa nem queda.
           </p>
           <CoverageBar stateMs={data.summary.stateMs} />
           <GapList gaps={data.summary.gaps} />
@@ -153,23 +176,64 @@ function StateChip({ state }: { state: CoverageState | null }) {
   );
 }
 
-function WindowPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+interface RangeBarProps {
+  range: ViewRange;
+  label: string;
+  onChange: (r: ViewRange) => void;
+  onZoom: (factor: number) => void;
+  onPan: (fraction: number) => void;
+}
+
+/** Controles do período, numa linha acima de tudo que ele afeta. */
+function RangeBar({ range, label, onChange, onZoom, onPan }: RangeBarProps) {
   return (
-    <fieldset className="segmented">
-      <legend className="sr-only">Período</legend>
-      {WINDOWS.map((w) => (
-        <label key={w.value} className={value === w.value ? "on" : undefined}>
-          <input
-            type="radio"
-            name="window"
-            value={w.value}
-            checked={value === w.value}
-            onChange={() => onChange(w.value)}
-          />
-          {w.label}
-        </label>
-      ))}
-    </fieldset>
+    <div className="rangebar" role="toolbar" aria-label="Período exibido">
+      <fieldset className="segmented">
+        <legend className="sr-only">Últimos</legend>
+        {PRESETS.map((p) => {
+          const on = range.live && range.spanMs === p.spanMs;
+          return (
+            <label key={p.window} className={on ? "on" : undefined}>
+              <input
+                type="radio"
+                name="preset"
+                checked={on}
+                onChange={() => onChange({ live: true, spanMs: p.spanMs })}
+              />
+              {p.label}
+            </label>
+          );
+        })}
+      </fieldset>
+      <div className="rangebar-nav">
+        <button className="btn-ghost" onClick={() => onPan(-0.5)} aria-label="Deslocar para o passado">
+          ‹
+        </button>
+        <button className="btn-ghost" onClick={() => onZoom(2)} aria-label="Afastar">
+          −
+        </button>
+        <button className="btn-ghost" onClick={() => onZoom(0.5)} aria-label="Aproximar">
+          +
+        </button>
+        <button
+          className="btn-ghost"
+          onClick={() => onPan(0.5)}
+          disabled={range.live}
+          aria-label="Deslocar para o presente"
+        >
+          ›
+        </button>
+      </div>
+      <span className="rangebar-label num">
+        {label}
+        {range.live ? <span className="live"> · ao vivo</span> : null}
+      </span>
+      {!range.live && (
+        <button className="btn-ghost" onClick={() => onChange({ live: true, spanMs: PRESETS[0].spanMs })}>
+          Voltar ao vivo
+        </button>
+      )}
+    </div>
   );
 }
 
