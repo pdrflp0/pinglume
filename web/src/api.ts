@@ -18,6 +18,7 @@ export interface Gap {
 }
 
 export interface Probe {
+  probeDefId: string;
   endpoint: string;
   kind: string;
   protocolVersion: number;
@@ -29,6 +30,8 @@ export interface Probe {
   p50Us: number | null;
   p95Us: number | null;
   coverage: number | null;
+  /** Tempo com intervalo ampliado após falhas seguidas. */
+  backoffMs: number;
   lastStarted: string;
 }
 
@@ -63,6 +66,7 @@ export interface Series {
   target: string;
   intervalMs: number;
   buckets: Bucket[];
+  backoff: { start: string; end: string; maxMultiplier: number }[];
 }
 
 export interface CoverageInterval {

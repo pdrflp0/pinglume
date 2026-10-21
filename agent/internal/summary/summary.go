@@ -7,6 +7,7 @@ import (
 	"sort"
 	"time"
 
+	"pinglume/agent/internal/backoff"
 	"pinglume/agent/internal/store"
 )
 
@@ -18,6 +19,7 @@ type Gap struct {
 }
 
 type Probe struct {
+	ProbeDefID      string         `json:"probeDefId"`
 	Endpoint        string         `json:"endpoint"`
 	Kind            string         `json:"kind"`
 	ProtocolVersion int            `json:"protocolVersion"`
@@ -31,7 +33,10 @@ type Probe struct {
 	P95US *int64 `json:"p95Us"`
 	// Coverage = execuções concluídas ÷ esperadas no tempo medindo; nil se
 	// o tempo medindo é curto demais para esperar ao menos uma execução.
-	Coverage    *float64  `json:"coverage"`
+	Coverage *float64 `json:"coverage"`
+	// BackoffMS é o tempo em que a sonda rodou com intervalo ampliado depois
+	// de falhas seguidas: parte da cobertura menor é escolha do agente.
+	BackoffMS   int64     `json:"backoffMs"`
 	LastStarted time.Time `json:"lastStarted"`
 }
 
@@ -82,8 +87,13 @@ func Build(ctx context.Context, st *store.Store, from, to time.Time, opt Options
 	if err != nil {
 		return s, err
 	}
+	spans, err := backoff.Spans(ctx, st, from, to)
+	if err != nil {
+		return s, err
+	}
 	for _, ps := range sums {
 		p := Probe{
+			ProbeDefID: ps.ProbeDefID, BackoffMS: backoff.Total(spans[ps.ProbeDefID]).Milliseconds(),
 			Endpoint: ps.EndpointLabel, Kind: ps.Kind, ProtocolVersion: ps.ProtocolVersion, Target: ps.Target,
 			IntervalMS: ps.Interval.Milliseconds(), Total: ps.Total, OK: ps.ByStatus["ok"],
 			Failures: map[string]int{}, LastStarted: ps.LastStarted,

@@ -4,6 +4,21 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); 
 
 ## [Não publicado]
 
+### Adicionado
+
+- Sonda DNS: resolve um nome único por execução (`<nonce>.<zona>`) para evitar cache; NXDOMAIN/SERVFAIL viram `dns_error`, sem resposta vira `timeout`.
+- Sonda HTTPS: conexão nova a cada execução, por IP (independe de DNS), certificado do testbed fixado, fases `connect`/`tls`/`ttfb` gravadas; status `tls_error` e `http_error` separados de falhas de rede.
+- Backoff por sonda após 3 falhas seguidas (intervalo ×2 até ×8), registrado em eventos e exibido como tempo em backoff no resumo, na CLI e na linha do tempo.
+- `probe-server`: HTTPS com certificado autoassinado persistido, DNS autoritativo mínimo para a zona de teste, limite por IP e API de falhas em loopback (`dns`, `https`, `httpsDelay`, `listener`).
+
+### Alterado
+
+- Rótulos de latência agora dizem o que cada tipo de sonda mede (handshake, resolução, requisição completa).
+
+### Removido
+
+- Flag `-fault`/`-fault-after` do `probe-server`, substituída pela API de falhas.
+
 ## [0.1.0] - 2026-10-21
 
 Primeira versão. Nível 1 ainda incompleto: só existe a sonda TCP, e ela mede apenas o `probe-server` local (os endpoints próprios ainda não estão hospedados).

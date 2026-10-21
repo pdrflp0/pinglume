@@ -9,3 +9,4 @@ dist/
 
 agent/internal/webui/static/*
 !agent/internal/webui/static/README
+testbed/tls/

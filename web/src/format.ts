@@ -55,3 +55,10 @@ const timeFmt = new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-d
 export function clock(iso: string): string {
   return timeFmt.format(new Date(iso));
 }
+
+/** O que a latência de cada tipo de sonda mede. */
+export const kindMeasure: Record<string, string> = {
+  tcp: "handshake TCP",
+  dns: "resolução de nome único",
+  https: "requisição HTTPS completa, com conexão nova",
+};

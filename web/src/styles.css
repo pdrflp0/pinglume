@@ -538,6 +538,13 @@ tbody th {
 .tl-fail {
   fill: var(--status-critical);
 }
+.tl-backoff {
+  fill: url(#backoff-dash);
+}
+.hatch-backoff {
+  fill: var(--text);
+  opacity: 0.7;
+}
 .tl-cursor {
   stroke: var(--text);
   stroke-width: 1;

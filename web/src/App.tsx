@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { api, ApiError, type CoverageState, type FailureKind, type Status, type Timeline as TimelineData } from "./api";
 import { DataTable } from "./DataTable";
-import { clock, duration, failureLabel, latency, percent, stateLabel, stateOrder } from "./format";
+import { clock, duration, failureLabel, kindMeasure, latency, percent, stateLabel, stateOrder } from "./format";
 import { pan, PRESETS, resolve, select, toQuery, zoom, type ViewRange } from "./range";
 import { rangeLabel } from "./scale";
 import { Timeline } from "./Timeline";
@@ -323,9 +323,15 @@ function ProbeTable({ probes }: { probes: Status["summary"]["probes"] }) {
                   <td>
                     {p.kind.toUpperCase()} v{p.protocolVersion}
                     <div className="muted small">a cada {duration(p.intervalMs)}</div>
+                    <div className="muted small">{kindMeasure[p.kind] ?? p.kind}</div>
                   </td>
                   <td className="r num">{p.total}</td>
-                  <td className="r num">{percent(p.coverage)}</td>
+                  <td className="r num">
+                    {percent(p.coverage)}
+                    {p.backoffMs > 0 && (
+                      <div className="muted small">{duration(p.backoffMs)} em backoff</div>
+                    )}
+                  </td>
                   <td className="r num">{p.ok}</td>
                   <td>
                     {fails.length === 0 ? (
@@ -350,8 +356,9 @@ function ProbeTable({ probes }: { probes: Status["summary"]["probes"] }) {
         </table>
       </div>
       <p className="muted small">
-        Cobertura: execuções concluídas ÷ esperadas enquanto o agente media. P50/P95: tempo de handshake só das
-        execuções bem-sucedidas. Falhas são rotuladas pelo protocolo da sonda; não são perda de pacotes IP.
+        Cobertura: execuções concluídas ÷ esperadas enquanto o agente media. Backoff: depois de falhas seguidas, o
+        agente amplia o intervalo para não insistir no endpoint, e a cobertura cai de propósito. P50/P95: só execuções
+        bem-sucedidas. Falhas são rotuladas pelo protocolo da sonda; não são perda de pacotes IP.
       </p>
     </>
   );

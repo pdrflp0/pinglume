@@ -5,6 +5,7 @@ package sched
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"math/rand/v2"
 	"sync"
@@ -28,6 +29,21 @@ type Scheduler struct {
 	Concurrency int     // sondas simultâneas no máximo
 	Jitter      float64 // fração do intervalo, ex.: 0.1 = ±10%
 	Log         *slog.Logger
+
+	// Backoff: depois de BackoffAfter falhas seguidas, o intervalo dobra a
+	// cada nova falha até BackoffMax vezes o normal, para não insistir num
+	// endpoint com problema. Menos execuções = cobertura menor; o período fica
+	// registrado em eventos probe_backoff / probe_backoff_end. Zero = padrão.
+	BackoffAfter int
+	BackoffMax   int
+}
+
+// BackoffDetail é o conteúdo (JSON) dos eventos de backoff.
+type BackoffDetail struct {
+	ProbeDefID string `json:"probeDefId"`
+	Multiplier int    `json:"multiplier"`
+	IntervalMS int64  `json:"intervalMs"`
+	Reason     string `json:"reason,omitempty"`
 }
 
 // Run bloqueia até ctx ser cancelado e todas as sondas em andamento terminarem.
@@ -50,6 +66,35 @@ func (s *Scheduler) Run(ctx context.Context, jobs []Job) error {
 }
 
 func (s *Scheduler) loop(ctx context.Context, j Job, seq int64, sem chan struct{}) {
+	after, maxMult := s.BackoffAfter, s.BackoffMax
+	if after <= 0 {
+		after = 3
+	}
+	if maxMult <= 0 {
+		maxMult = 8
+	}
+	fails, mult := 0, 1
+	setMult := func(m int, reason string) {
+		if m == mult {
+			return
+		}
+		kind := "probe_backoff"
+		if m == 1 {
+			kind = "probe_backoff_end"
+		}
+		d, _ := json.Marshal(BackoffDetail{ProbeDefID: j.Def.ID, Multiplier: m,
+			IntervalMS: (j.Def.Interval * time.Duration(m)).Milliseconds(), Reason: reason})
+		wctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+		s.Store.InsertSystemEvent(wctx, s.Clock.Now(), kind, string(d))
+		cancel()
+		mult = m
+	}
+	defer func() {
+		if mult > 1 {
+			setMult(1, "agente parou ou pausou")
+		}
+	}()
+
 	// Primeiro disparo espalhado dentro do intervalo para não sincronizar sondas.
 	wait := time.Duration(rand.Float64() * float64(j.Def.Interval))
 	for {
@@ -78,6 +123,10 @@ func (s *Scheduler) loop(ctx context.Context, j Job, seq int64, sem chan struct{
 			ErrorDetail: res.ErrorDetail,
 			ReceivedAt:  s.Clock.Now().UTC(),
 		}
+		if len(res.Phases) > 0 {
+			b, _ := json.Marshal(res.Phases)
+			obs.PhasesJSON = string(b)
+		}
 		// A gravação usa contexto próprio e curto: uma sonda cancelada no
 		// desligamento ainda fica registrada como 'cancelled'.
 		writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
@@ -89,7 +138,19 @@ func (s *Scheduler) loop(ctx context.Context, j Job, seq int64, sem chan struct{
 			seq++
 		}
 
-		wait = s.nextWait(j.Def.Interval, res.Duration)
+		switch res.Status {
+		case "ok":
+			fails = 0
+			setMult(1, "sonda voltou a responder")
+		case "cancelled":
+			// cancelamento é do agente, não do endpoint
+		default:
+			fails++
+			if fails >= after {
+				setMult(min(maxMult, 1<<(fails-after+1)), "falhas seguidas: "+res.Status)
+			}
+		}
+		wait = s.nextWait(j.Def.Interval*time.Duration(mult), res.Duration)
 	}
 }
 

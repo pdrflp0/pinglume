@@ -14,7 +14,7 @@ web:
 
 test:
 	cd agent && go test -race -count=1 ./...
-	cd probe-server && go vet ./...
+	cd probe-server && go test -race -count=1 ./...
 	cd web && npm run typecheck && npm test
 
 vet:
@@ -28,7 +28,9 @@ clean:
 # Testbed local: em um terminal `make dev-server`, em outro `make dev-agent`,
 # depois `agent/bin/pinglume open --data-dir .dev-data`.
 dev-server:
-	probe-server/bin/probe-server -tcp 127.0.0.1:9443
+	probe-server/bin/probe-server -tcp 127.0.0.1:9443 -dns 127.0.0.1:15353 -admin 127.0.0.1:9900
 
 dev-agent:
-	agent/bin/pinglume run --data-dir .dev-data --dev-target ep-1=127.0.0.1:9443
+	agent/bin/pinglume run --data-dir .dev-data \
+		--dev-target ep-1=127.0.0.1:9443 --dev-dns ep-1=127.0.0.1:15353 \
+		--dev-ca testbed/tls/probe-server.pem

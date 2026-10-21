@@ -235,6 +235,7 @@ func (s *Store) InsertSystemEvent(ctx context.Context, at time.Time, kind, detai
 // ProbeSummary descreve uma sonda num período. Durações só entram nos
 // percentis quando o status é ok: um timeout não tem latência.
 type ProbeSummary struct {
+	ProbeDefID                  string
 	Kind, Target, EndpointLabel string
 	ProtocolVersion             int
 	Interval                    time.Duration
@@ -267,7 +268,7 @@ func (s *Store) Summaries(ctx context.Context, since time.Time) ([]ProbeSummary,
 		}
 		ps, ok := byID[id]
 		if !ok {
-			ps = &ProbeSummary{Kind: kind, Target: target, EndpointLabel: label, ProtocolVersion: version,
+			ps = &ProbeSummary{ProbeDefID: id, Kind: kind, Target: target, EndpointLabel: label, ProtocolVersion: version,
 				Interval: time.Duration(intervalMS) * time.Millisecond, ByStatus: map[string]int{}}
 			byID[id] = ps
 			order = append(order, id)
