@@ -139,7 +139,7 @@ Todos os IDs são ULID (ordenáveis por tempo, gerados localmente, estáveis par
 
 | Sonda | O que mede | Como | Intervalo padrão [EST] |
 | --- | --- | --- | --- |
-| `dns` v1 | Tempo e sucesso de resolução pelo resolvedor do sistema | Resolve `<nonce>.p.<dominio-pinglume>` (curinga autoritativo próprio) para evitar cache; registra rcode. | 30 s |
+| `dns` v1 | Tempo e sucesso de resolução pelo resolvedor do sistema | Resolve `<nonce>.p.<dominio-pinglume>` (curinga autoritativo próprio) para evitar cache; registra rcode. No testbed, consulta o servidor de teste diretamente (parâmetro `resolver` na definição). | 30 s |
 | `tcp` v1 | Tempo de handshake TCP | `connect` em `ep:443` por IP já resolvido (isola do DNS), fecha imediatamente. | 10 s |
 | `https` v1 | DNS+TCP+TLS+TTFB de uma requisição pequena | Conexão nova, `GET /p` → resposta ~64 B, sem cookies, `User-Agent: pinglume/<versão>`. Fases via `httptrace`. | 60 s |
 | `udp_echo` v1 (F12) | Perda de datagramas UDP de aplicação, RTT e jitter | Rajada de 20 datagramas de 64 B a 20 ms (≈ ritmo de áudio VoIP), com seq e timestamp; servidor ecoa. Começa em 1 endpoint ou só durante sessões de investigação. | 1 rajada/15 s |

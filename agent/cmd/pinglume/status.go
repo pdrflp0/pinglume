@@ -54,15 +54,21 @@ func cmdStatus(args []string) error {
 		return nil
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "ENDPOINT\tSONDA\tALVO\tEXECUÇÕES\tCOBERTURA\tOK\tFALHAS\tP50\tP95\tÚLTIMA")
+	fmt.Fprintln(w, "ENDPOINT\tSONDA\tALVO\tEXECUÇÕES\tCOBERTURA\tBACKOFF\tOK\tFALHAS\tP50\tP95\tÚLTIMA")
 	for _, p := range s.Probes {
-		fmt.Fprintf(w, "%s\t%s v%d\t%s\t%d\t%s\t%d\t%s\t%s\t%s\t%s\n",
-			p.Endpoint, p.Kind, p.ProtocolVersion, p.Target, p.Total, ratio(p.Coverage), p.OK,
+		bo := "-"
+		if p.BackoffMS > 0 {
+			bo = (time.Duration(p.BackoffMS) * time.Millisecond).Round(time.Second).String()
+		}
+		fmt.Fprintf(w, "%s\t%s v%d\t%s\t%d\t%s\t%s\t%d\t%s\t%s\t%s\t%s\n",
+			p.Endpoint, p.Kind, p.ProtocolVersion, p.Target, p.Total, ratio(p.Coverage), bo, p.OK,
 			failures(p.Failures), micros(p.P50US), micros(p.P95US), p.LastStarted.Local().Format("15:04:05"))
 	}
 	w.Flush()
 	fmt.Println("\nCOBERTURA: execuções concluídas ÷ esperadas durante o tempo medindo.")
-	fmt.Println("P50/P95: tempo de handshake TCP só das execuções ok. Falhas são rotuladas pelo protocolo, não são perda de pacotes IP.")
+	fmt.Println("BACKOFF: tempo com intervalo ampliado após falhas seguidas (reduz a cobertura de propósito).")
+	fmt.Println("P50/P95, só execuções ok — tcp: handshake; dns: resolução de nome único; https: requisição completa com conexão nova.")
+	fmt.Println("Falhas são rotuladas pelo protocolo da sonda; não são perda de pacotes IP.")
 	return nil
 }
 

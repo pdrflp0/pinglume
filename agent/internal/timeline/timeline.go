@@ -8,6 +8,7 @@ import (
 	"sort"
 	"time"
 
+	"pinglume/agent/internal/backoff"
 	"pinglume/agent/internal/store"
 )
 
@@ -33,6 +34,8 @@ type Series struct {
 	// período "measuring" significa apenas que nenhuma sonda começou nele
 	// (balde menor que o intervalo); fora dele, é falta de cobertura.
 	Buckets []Bucket `json:"buckets"`
+	// Backoff são os períodos com intervalo ampliado após falhas seguidas.
+	Backoff []backoff.Span `json:"backoff"`
 }
 
 type Interval struct {
@@ -105,8 +108,16 @@ func Build(ctx context.Context, st *store.Store, from, to time.Time, n int, live
 			a.b.Fail[r.Status]++
 		}
 	}
+	spans, err := backoff.Spans(ctx, st, from, to)
+	if err != nil {
+		return tl, err
+	}
 	for _, id := range order {
 		s := bySeries[id]
+		s.Backoff = spans[id]
+		if s.Backoff == nil {
+			s.Backoff = []backoff.Span{}
+		}
 		idxs := make([]int64, 0, len(accs[id]))
 		for i := range accs[id] {
 			idxs = append(idxs, i)

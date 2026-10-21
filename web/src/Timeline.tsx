@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import type { Bucket, CoverageState, Series, Timeline as TimelineData } from "./api";
-import { duration, failureLabel, latency, stateLabel } from "./format";
+import { duration, failureLabel, kindMeasure, latency, stateLabel } from "./format";
 import { niceMax, tickLabel, timeTicks } from "./scale";
 
 const M = { left: 56, right: 14 };
@@ -233,7 +233,8 @@ export function Timeline({ data, onSelect, onZoom, onPan, onLive }: Props) {
                 <strong>{s.endpoint}</strong>
                 <span className="muted">
                   {" "}
-                  · {s.kind.toUpperCase()} v{s.protocolVersion} · {s.target} · a cada {duration(s.intervalMs)}
+                  · {s.kind.toUpperCase()} v{s.protocolVersion} · {kindMeasure[s.kind] ?? s.kind} · {s.target} · a
+                  cada {duration(s.intervalMs)}
                 </span>
               </div>
               <svg width={width} height={PLOT_H + FAIL_H + 10} className="tl-svg" aria-hidden="true">
@@ -245,6 +246,16 @@ export function Timeline({ data, onSelect, onZoom, onPan, onLive }: Props) {
                     width={Math.max(1, x(g.end) - x(g.start))}
                     height={PLOT_H}
                     className={`gapband cov-${g.state}`}
+                  />
+                ))}
+                {s.backoff.map((b) => (
+                  <rect
+                    key={b.start}
+                    x={x(Date.parse(b.start))}
+                    y={0}
+                    width={Math.max(2, x(Date.parse(b.end)) - x(Date.parse(b.start)))}
+                    height={4}
+                    className="tl-backoff"
                   />
                 ))}
                 {yTicks.map((v) => (
@@ -317,9 +328,11 @@ export function Timeline({ data, onSelect, onZoom, onPan, onLive }: Props) {
         )}
       </div>
       <p id="tl-help" className="muted small">
-        Linha: tempo de handshake (mediana); faixa clara: até o p95, só execuções bem-sucedidas. Barras de falha:
-        fração das execuções que falharam no trecho. Áreas hachuradas: sem medição. Arraste para aproximar. No
-        teclado: ←/→ percorre, Shift+←/→ desloca, + e − aproximam e afastam, Esc volta ao vivo.
+        Linha: mediana do tempo da sonda (o título de cada painel diz o que ela mede); faixa clara: até o p95, só
+        execuções bem-sucedidas. Barras de falha: fração das execuções que falharam no trecho. Traço tracejado no
+        topo do painel: sonda em backoff (intervalo ampliado após falhas seguidas). Áreas hachuradas: sem medição.
+        Arraste para aproximar. No teclado: ←/→ percorre, Shift+←/→ desloca, + e − aproximam e afastam, Esc volta ao
+        vivo.
       </p>
     </div>
   );
@@ -352,6 +365,9 @@ function Patterns() {
           <rect width={state === "unrecorded" ? 1 : 2.5} height={size} className={`hatch hatch-${state}`} />
         </pattern>
       ))}
+      <pattern id="backoff-dash" width={7} height={4} patternUnits="userSpaceOnUse">
+        <rect width={4} height={4} className="hatch-backoff" />
+      </pattern>
     </defs>
   );
 }
@@ -380,6 +396,7 @@ function Readout({ data, cursorT, segs }: { data: TimelineData; cursorT: number 
       <ul>
         {data.series.map((s) => {
           const b = s.buckets.find((x) => x.t === cursorT);
+          const inBackoff = s.backoff.some((k) => Date.parse(k.start) <= mid && Date.parse(k.end) > mid);
           return (
             <li key={s.probeDefId}>
               <span className="tl-readout-name">
@@ -404,6 +421,7 @@ function Readout({ data, cursorT, segs }: { data: TimelineData; cursorT: number 
               ) : (
                 <span className="muted">nenhuma execução começou neste trecho</span>
               )}
+              {inBackoff && <span className="muted"> · em backoff</span>}
             </li>
           );
         })}

@@ -13,7 +13,8 @@ Ferramenta local para investigar falhas intermitentes de internet durante chamad
 | F2 cobertura: heartbeat, agente parado, suspensão, pausa | feito; suspensão testada só com relógio simulado |
 | F3 API local segura + dashboard servido pelo agente | feito e testado |
 | F4 linha do tempo com lacunas, zoom, teclado e tabela equivalente | feito e testado |
-| F5 em diante | ver backlog no documento de desenho |
+| F5 sondas DNS e HTTPS, backoff e injeção de falhas no probe-server | feito e testado |
+| F6 em diante | ver backlog no documento de desenho |
 
 ## Rodar localmente
 
@@ -61,7 +62,30 @@ agent/bin/pinglume pause --data-dir .dev-data
 agent/bin/pinglume resume --data-dir .dev-data
 ```
 
-Para simular uma falha, rode o servidor com `-fault close -fault-after 30s`: a escuta fecha e as sondas passam a registrar `refused`.
+### Simular falhas no testbed
+
+O `probe-server` tem uma API de administração só em loopback (`127.0.0.1:9900`). Exemplos:
+
+```bash
+curl -X PUT -d '{"dns":"drop"}' http://127.0.0.1:9900/faults
+```
+
+```bash
+curl -X PUT -d '{"dns":"ok","listener":"closed"}' http://127.0.0.1:9900/faults
+```
+
+```bash
+curl -X PUT -d '{"listener":"open","https":"ok","httpsDelay":"0s"}' http://127.0.0.1:9900/faults
+```
+
+| Campo | Valores |
+| --- | --- |
+| `dns` | `ok`, `drop` (não responde), `servfail`, `nxdomain` |
+| `https` | `ok`, `error500`, `hang` (segura a resposta) |
+| `httpsDelay` | duração, ex.: `300ms` |
+| `listener` | `open`, `closed` (TCP e HTTPS recebem conexão recusada) |
+
+O certificado autoassinado do testbed é criado em `testbed/tls/` na primeira execução (fora do git) e fixado pelo agente com `--dev-ca`.
 
 ## Desenvolvimento
 
@@ -69,7 +93,9 @@ Branches, versionamento (SemVer) e convenção de commits: [docs/fluxo-git.md](d
 
 ## Limites conhecidos
 
-- Só a sonda TCP existe; DNS, HTTPS e UDP chegam em F5 e F12.
+- No testbed, a sonda DNS consulta o servidor de teste diretamente (`--dev-dns`). Em produção ela usará o resolvedor do sistema; as duas são definições diferentes e nunca se comparam.
+- Em backoff (até 8× o intervalo), a volta de uma sonda demora mais para aparecer: no ensaio, o DNS restaurado só foi medido ~22 s depois.
+- Sonda UDP (perda e jitter) é a fatia F12.
 - Alvos de desenvolvimento precisam ser loopback ou rede privada; o agente recusa outros.
 - A detecção de suspensão compara relógio civil e monotônico. Ela não distingue sono de relógio adiantado manualmente (o motivo registrado diz isso) e ainda não foi validada com o Mac dormindo de verdade.
 - Depois de um crash, a lacuna começa no último heartbeat (a cada 5 s): o instante exato da queda tem até 5 s de incerteza.

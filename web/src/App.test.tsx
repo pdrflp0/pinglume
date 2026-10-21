@@ -32,6 +32,8 @@ const status: Status = {
         p50Us: 640,
         p95Us: 3100,
         coverage: 0.97,
+        probeDefId: "p1",
+        backoffMs: 0,
         lastStarted: "2026-10-20T21:14:55Z",
       },
     ],
@@ -54,6 +56,7 @@ const timeline: Timeline = {
         { t: Date.parse("2026-10-20T21:01:00Z"), n: 1, ok: 1, p50Us: 600, p95Us: 600, maxUs: 600 },
         { t: Date.parse("2026-10-20T21:01:09Z"), n: 1, ok: 0, fail: { refused: 1 }, p50Us: null, p95Us: null, maxUs: null },
       ],
+      backoff: [],
     },
   ],
   coverage: [
