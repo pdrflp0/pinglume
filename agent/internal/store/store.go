@@ -289,3 +289,85 @@ func (s *Store) Summaries(ctx context.Context, since time.Time) ([]ProbeSummary,
 	}
 	return out, rows.Err()
 }
+
+// ObservationRow é uma observação com os metadados da sonda, para séries temporais.
+type ObservationRow struct {
+	ProbeDefID      string
+	Kind            string
+	Target          string
+	EndpointLabel   string
+	ProtocolVersion int
+	Interval        time.Duration
+	Started         time.Time
+	Duration        time.Duration
+	Status          string
+}
+
+// ObservationsBetween devolve as observações iniciadas em [from, to), em ordem de tempo.
+func (s *Store) ObservationsBetween(ctx context.Context, from, to time.Time) ([]ObservationRow, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT pd.id, pd.kind, pd.target, e.label, pd.protocol_version, pd.interval_ms,
+		       o.started_wall_ms, o.duration_us, o.status
+		FROM observations o
+		JOIN probe_definitions pd ON pd.id = o.probe_def_id
+		JOIN endpoints e ON e.id = pd.endpoint_id
+		WHERE o.started_wall_ms >= ? AND o.started_wall_ms < ?
+		ORDER BY o.started_wall_ms`, from.UnixMilli(), to.UnixMilli())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ObservationRow
+	for rows.Next() {
+		var r ObservationRow
+		var intervalMS, startedMS, durUS int64
+		if err := rows.Scan(&r.ProbeDefID, &r.Kind, &r.Target, &r.EndpointLabel, &r.ProtocolVersion,
+			&intervalMS, &startedMS, &durUS, &r.Status); err != nil {
+			return nil, err
+		}
+		r.Interval = time.Duration(intervalMS) * time.Millisecond
+		r.Started = time.UnixMilli(startedMS)
+		r.Duration = time.Duration(durUS) * time.Microsecond
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+type SystemEvent struct {
+	At     time.Time
+	Kind   string
+	Detail string
+}
+
+func (s *Store) SystemEvents(ctx context.Context, from, to time.Time) ([]SystemEvent, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT at_wall_ms, kind, detail FROM system_events
+		WHERE at_wall_ms >= ? AND at_wall_ms <= ? ORDER BY at_wall_ms`, from.UnixMilli(), to.UnixMilli())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []SystemEvent
+	for rows.Next() {
+		var e SystemEvent
+		var atMS int64
+		if err := rows.Scan(&atMS, &e.Kind, &e.Detail); err != nil {
+			return nil, err
+		}
+		e.At = time.UnixMilli(atMS)
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
+// LastObservationAt devolve quando a observação mais recente do dispositivo
+// foi gravada: também é evidência de que o agente estava vivo.
+func (s *Store) LastObservationAt(ctx context.Context, deviceID string) (time.Time, bool, error) {
+	var ms sql.NullInt64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT MAX(received_at_ms) FROM observations WHERE device_id = ?`, deviceID).Scan(&ms)
+	if err != nil || !ms.Valid {
+		return time.Time{}, false, err
+	}
+	return time.UnixMilli(ms.Int64), true, nil
+}

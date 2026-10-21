@@ -20,6 +20,13 @@
   --error-bg: #fde8e6;
   --error-border: #e2928a;
 
+  /* Gráfico: uma série por painel (slot categórico 1) e falhas com a cor de
+     status "critical"; ambas validadas contra a superfície de cada modo. */
+  --series-1: #2a78d6;
+  --series-1-band: rgba(42, 120, 214, 0.16);
+  --status-critical: #d03b3b;
+  --grid: #e7eaee;
+
   --radius: 10px;
   --mono: ui-monospace, "SF Mono", Menlo, monospace;
 }
@@ -46,6 +53,10 @@
     --warn-border: #6b5823;
     --error-bg: #2e1715;
     --error-border: #77362e;
+
+    --series-1: #3987e5;
+    --series-1-band: rgba(57, 135, 229, 0.2);
+    --grid: #262b33;
   }
 }
 
@@ -411,6 +422,185 @@ tbody th {
   border-radius: 8px;
   padding: 10px 12px;
   overflow-x: auto;
+}
+
+/* Barra de período */
+.rangebar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  margin-bottom: 16px;
+}
+.rangebar-nav {
+  display: inline-flex;
+  gap: 4px;
+}
+.rangebar-label {
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+.rangebar-label .live {
+  color: var(--measuring);
+  font-weight: 600;
+}
+.btn-ghost {
+  font: inherit;
+  font-size: 0.9rem;
+  min-width: 32px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+.btn-ghost:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Linha do tempo */
+.tl-readout {
+  min-height: 64px;
+  padding: 8px 10px;
+  margin: 10px 0;
+  border-radius: 8px;
+  background: var(--bg);
+  font-size: 0.88rem;
+}
+.tl-readout-head {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  margin-bottom: 2px;
+}
+.tl-readout ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.tl-readout-name {
+  display: inline-block;
+  min-width: 7.5em;
+  font-weight: 600;
+}
+.tl-plot {
+  position: relative;
+  user-select: none;
+  touch-action: pan-y;
+  cursor: crosshair;
+  border-radius: 6px;
+}
+.tl-plot:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+}
+.tl-svg {
+  display: block;
+  overflow: visible;
+}
+.tl-panel {
+  margin-top: 10px;
+}
+.tl-title {
+  font-size: 0.85rem;
+  padding-left: 56px;
+  margin-bottom: 2px;
+}
+.tl-empty {
+  padding: 24px 0 24px 56px;
+}
+.tl-axis-label {
+  font-size: 11px;
+  fill: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.tl-grid {
+  stroke: var(--grid);
+  stroke-width: 1;
+}
+.tl-line {
+  fill: none;
+  stroke: var(--series-1);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.tl-band {
+  fill: var(--series-1-band);
+}
+.tl-point {
+  fill: var(--series-1);
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+.tl-fail {
+  fill: var(--status-critical);
+}
+.tl-cursor {
+  stroke: var(--text);
+  stroke-width: 1;
+  opacity: 0.55;
+}
+.tl-brush {
+  position: absolute;
+  top: 0;
+  bottom: 20px;
+  background: var(--series-1-band);
+  border-left: 1px solid var(--series-1);
+  border-right: 1px solid var(--series-1);
+  pointer-events: none;
+}
+.cov-measuring {
+  fill: var(--measuring);
+}
+.cov-paused {
+  fill: url(#hatch-paused);
+}
+.cov-suspended {
+  fill: url(#hatch-suspended);
+}
+.cov-agent_down {
+  fill: url(#hatch-agent_down);
+}
+.cov-probe_unavailable {
+  fill: url(#hatch-probe_unavailable);
+}
+.cov-unrecorded,
+.cov-shutting_down {
+  fill: url(#hatch-unrecorded);
+}
+.gapband {
+  opacity: 0.55;
+}
+/* "Sem registro" é o fundo comum de períodos antigos: mais discreto que
+   lacunas com causa conhecida, para não competir com elas. */
+.gapband.cov-unrecorded {
+  opacity: 0.3;
+}
+.hatch-paused {
+  fill: var(--paused);
+}
+.hatch-suspended {
+  fill: var(--suspended);
+}
+.hatch-agent_down {
+  fill: var(--agent-down);
+}
+.hatch-probe_unavailable {
+  fill: var(--unavailable);
+}
+.hatch-unrecorded {
+  fill: var(--unrecorded);
+}
+.datatable {
+  margin-top: 14px;
+}
+.datatable summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
 }
 
 @media (prefers-reduced-motion: reduce) {
