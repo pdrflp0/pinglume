@@ -11,6 +11,10 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); 
 - Backoff por sonda após 3 falhas seguidas (intervalo ×2 até ×8), registrado em eventos e exibido como tempo em backoff no resumo, na CLI e na linha do tempo.
 - `probe-server`: HTTPS com certificado autoassinado persistido, DNS autoritativo mínimo para a zona de teste, limite por IP e API de falhas em loopback (`dns`, `https`, `httpsDelay`, `listener`).
 
+- Relatos "travou agora" pelo dashboard (diálogo com sintoma, horário e observação) e pela CLI (`pinglume mark`, `pinglume incidents`), distintos de medições na interface e marcados na linha do tempo.
+- Regra `incident-v1`: janela de 5 min antes a 1 min depois do relato, linha de base das 2 h anteriores, vereditos `aguardando_dados`, `sem_cobertura`, `degradacao_observada` e `sem_degradacao_detectavel`; cada frase traz as entradas que a sustentam, sempre com alternativas, próximo teste e limites. A interpretação fica gravada e imutável quando a janela fecha.
+- Exclusão de relatos, com confirmação, apagando também a interpretação.
+
 ### Alterado
 
 - Rótulos de latência agora dizem o que cada tipo de sonda mede (handshake, resolução, requisição completa).

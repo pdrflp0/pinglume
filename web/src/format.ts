@@ -62,3 +62,18 @@ export const kindMeasure: Record<string, string> = {
   dns: "resolução de nome único",
   https: "requisição HTTPS completa, com conexão nova",
 };
+
+export const symptomLabel: Record<string, string> = {
+  audio_cut: "Áudio cortou",
+  video_freeze: "Vídeo congelou",
+  dropped_call: "Chamada caiu",
+  slow: "Lentidão",
+  other: "Outro",
+};
+
+export const verdictLabel: Record<string, string> = {
+  aguardando_dados: "Aguardando dados",
+  sem_cobertura: "Sem cobertura",
+  degradacao_observada: "Degradação observada",
+  sem_degradacao_detectavel: "Sem degradação detectável",
+};

@@ -153,7 +153,7 @@ func cmdRun(args []string) error {
 	}
 
 	srv := &api.Server{Store: st, Ctl: controller{r: r, ctl: ctl}, Token: token, Port: c.port,
-		Version: version, Static: webui.FS()}
+		Version: version, Static: webui.FS(), DeviceID: dev.ID}
 	ln, err := srv.Listen()
 	if err != nil {
 		return fmt.Errorf("API local na porta %d: %w", c.port, err)
