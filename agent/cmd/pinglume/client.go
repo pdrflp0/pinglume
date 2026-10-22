@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -15,6 +17,10 @@ import (
 
 // apiCall faz um pedido autenticado à API local do agente em execução.
 func apiCall(c common, method, path string, out any) error {
+	return apiCallBody(c, method, path, nil, out)
+}
+
+func apiCallBody(c common, method, path string, body any, out any) error {
 	b, err := os.ReadFile(c.tokenPath())
 	if errors.Is(err, os.ErrNotExist) {
 		return errors.New("token não encontrado: o agente já rodou neste diretório de dados?")
@@ -22,9 +28,20 @@ func apiCall(c common, method, path string, out any) error {
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequest(method, fmt.Sprintf("http://127.0.0.1:%d%s", c.port, path), nil)
+	var rd io.Reader
+	if body != nil {
+		payload, err := json.Marshal(body)
+		if err != nil {
+			return err
+		}
+		rd = bytes.NewReader(payload)
+	}
+	req, err := http.NewRequest(method, fmt.Sprintf("http://127.0.0.1:%d%s", c.port, path), rd)
 	if err != nil {
 		return err
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
 	}
 	req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(string(b)))
 	resp, err := (&http.Client{Timeout: 5 * time.Second}).Do(req)

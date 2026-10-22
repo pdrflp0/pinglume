@@ -72,8 +72,45 @@ const timeline: Timeline = {
   events: [],
 };
 
+const detail = {
+  incident: {
+    id: "inc1",
+    reportedAt: "2026-10-20T21:10:00Z",
+    createdAt: "2026-10-20T21:10:00Z",
+    symptom: "audio_cut",
+    note: "",
+    createdVia: "dashboard",
+  },
+  analysis: {
+    ruleVersion: "incident-v1",
+    verdict: "degradacao_observada",
+    windowFrom: "2026-10-20T21:05:00Z",
+    windowTo: "2026-10-20T21:11:00Z",
+    baselineFrom: "2026-10-20T19:05:00Z",
+    measuringMs: 360_000,
+    windowMs: 360_000,
+    probes: [],
+    findings: [
+      { text: "TCP (ep-1) falhou em 5 de 36 execuções na janela.", inputs: ["janela: 36 execuções"] },
+      { text: "A degradação coincide com o relato no tempo. Isso não prova que ela causou o problema.", inputs: ["regra incident-v1"] },
+    ],
+    alternatives: ["Problema no trecho entre este computador e a internet."],
+    nextTest: "Faça uma comparação guiada por cabo.",
+    caveats: [],
+    final: true,
+  },
+};
+
+let incidents: unknown[] = [];
+
 /** Responde por rota, como o agente. */
 function route(url: string, init?: RequestInit) {
+  if (url === "/api/v1/incidents" && init?.method === "POST") {
+    incidents = [{ ...detail.incident, verdict: "degradacao_observada", final: true }];
+    return respond(detail, { status: 201 });
+  }
+  if (url.startsWith("/api/v1/incidents/")) return respond(detail);
+  if (url.startsWith("/api/v1/incidents")) return respond(incidents);
   if (init?.method === "POST") return respond({ state: "paused" });
   if (url.startsWith("/api/v1/timeline")) return respond(timeline);
   return respond(status);
@@ -86,6 +123,7 @@ function respond(body: unknown, init: ResponseInit = { status: 200 }) {
 let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
+  incidents = [];
   vi.useFakeTimers({ shouldAdvanceTime: true });
   fetchMock = vi.fn();
   vi.stubGlobal("fetch", fetchMock);
@@ -174,4 +212,43 @@ test("zoom pelo teclado fixa o período e oferece voltar ao vivo", async () => {
   fireEvent.keyDown(plot, { key: "Escape" });
   await act(async () => {});
   expect(screen.queryByText("Voltar ao vivo")).toBeNull();
+});
+
+test("relatar: diálogo envia o sintoma e a análise aparece com ressalva de causalidade", async () => {
+  fetchMock.mockImplementation(route);
+  render(<App />);
+  fireEvent.click(await screen.findByRole("button", { name: "Travou agora" }));
+  fireEvent.click(screen.getByLabelText("Vídeo congelou"));
+  fireEvent.click(screen.getByText("Registrar relato"));
+
+  const post = await vi.waitFor(() => {
+    const c = fetchMock.mock.calls.find(([u, i]) => u === "/api/v1/incidents" && i?.method === "POST");
+    if (!c) throw new Error("POST ainda não feito");
+    return c;
+  });
+  expect(JSON.parse(post[1].body)).toMatchObject({ symptom: "video_freeze", note: "" });
+
+  expect(await screen.findByText(/falhou em 5 de 36/)).toBeTruthy();
+  expect(screen.getByText(/não prova que ela causou/)).toBeTruthy();
+  expect(screen.getAllByText("Degradação observada").length).toBeGreaterThan(0);
+  // O relato aparece na linha do tempo como marca própria, distinta das medições.
+  expect(screen.getByLabelText(/Relato: Áudio cortou às/)).toBeTruthy();
+});
+
+test("apagar relato pede confirmação", async () => {
+  incidents = [{ ...detail.incident, verdict: "degradacao_observada", final: true }];
+  fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+    if (init?.method === "DELETE") return Promise.resolve(new Response(null, { status: 204 }));
+    return route(url, init);
+  });
+  render(<App />);
+  fireEvent.click(await screen.findByRole("button", { name: /Áudio cortou/, expanded: false }));
+  fireEvent.click(await screen.findByText("Apagar relato"));
+  expect(fetchMock.mock.calls.some(([, i]) => i?.method === "DELETE")).toBe(false);
+  fireEvent.click(screen.getByText("Apagar"));
+  await vi.waitFor(() => {
+    if (!fetchMock.mock.calls.some(([u, i]) => u === "/api/v1/incidents/inc1" && i?.method === "DELETE")) {
+      throw new Error("DELETE não enviado");
+    }
+  });
 });

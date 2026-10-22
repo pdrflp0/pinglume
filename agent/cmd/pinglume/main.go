@@ -28,6 +28,10 @@ func main() {
 		err = cmdStatus(os.Args[2:])
 	case "open":
 		err = cmdOpen(os.Args[2:])
+	case "mark":
+		err = cmdMark(os.Args[2:])
+	case "incidents":
+		err = cmdIncidents(os.Args[2:])
 	case "pause":
 		err = cmdPause(os.Args[2:], true)
 	case "resume":
@@ -51,6 +55,8 @@ comandos:
   run      inicia a coleta e o dashboard local (Ctrl+C encerra)
   open     abre o dashboard no navegador com uma sessão nova
   status   resume medições e cobertura recentes (lê o banco; funciona com o agente parado)
+  mark       registra "travou agora" (um relato, não uma medição)
+  incidents  lista os relatos e a análise de cada um
   pause    pausa novas medições do agente em execução
   resume   retoma as medições
   version  mostra a versão`)

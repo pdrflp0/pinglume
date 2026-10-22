@@ -14,7 +14,8 @@ Ferramenta local para investigar falhas intermitentes de internet durante chamad
 | F3 API local segura + dashboard servido pelo agente | feito e testado |
 | F4 linha do tempo com lacunas, zoom, teclado e tabela equivalente | feito e testado |
 | F5 sondas DNS e HTTPS, backoff e injeção de falhas no probe-server | feito e testado |
-| F6 em diante | ver backlog no documento de desenho |
+| F6 relatos ("travou agora") e análise `incident-v1` | feito e testado |
+| F7 em diante | ver backlog no documento de desenho |
 
 ## Rodar localmente
 
@@ -51,6 +52,20 @@ Resumo das medições no terminal (lê o banco; funciona com o agente parado):
 ```bash
 agent/bin/pinglume status --data-dir .dev-data
 ```
+
+Relatar que a chamada travou (também há o botão **Travou agora** no dashboard):
+
+```bash
+agent/bin/pinglume mark --data-dir .dev-data --symptom audio_cut --note "reunião"
+```
+
+Ver os relatos e a análise de um deles:
+
+```bash
+agent/bin/pinglume incidents --data-dir .dev-data
+```
+
+A análise (regra `incident-v1`) olha as medições de 5 min antes a 1 min depois do relato, compara com as 2 h anteriores e só fica definitiva quando essa janela fecha. Ela sempre lista outras explicações e um próximo teste, e nunca apresenta coincidência no tempo como causa.
 
 Pausar e retomar (a pausa persiste se o agente reiniciar):
 
@@ -96,6 +111,8 @@ Branches, versionamento (SemVer) e convenção de commits: [docs/fluxo-git.md](d
 - No testbed, a sonda DNS consulta o servidor de teste diretamente (`--dev-dns`). Em produção ela usará o resolvedor do sistema; as duas são definições diferentes e nunca se comparam.
 - Em backoff (até 8× o intervalo), a volta de uma sonda demora mais para aparecer: no ensaio, o DNS restaurado só foi medido ~22 s depois.
 - Sonda UDP (perda e jitter) é a fatia F12.
+- Os limiares da `incident-v1` (50% de cobertura, latência 2× a mediana e acima do p95 da base, 10 execuções ok de base) são escolhas iniciais, ainda não calibradas com uso real.
+- O NetContext (Wi-Fi × cabo) ainda não é coletado; a linha de base compara com as 2 h anteriores mesmo que a rede tenha mudado.
 - Alvos de desenvolvimento precisam ser loopback ou rede privada; o agente recusa outros.
 - A detecção de suspensão compara relógio civil e monotônico. Ela não distingue sono de relógio adiantado manualmente (o motivo registrado diz isso) e ainda não foi validada com o Mac dormindo de verdade.
 - Depois de um crash, a lacuna começa no último heartbeat (a cada 5 s): o instante exato da queda tem até 5 s de incerteza.
