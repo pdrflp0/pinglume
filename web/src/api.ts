@@ -137,6 +137,82 @@ export interface IncidentDetail {
   analysis: Analysis;
 }
 
+export interface NetContext {
+  interface: string;
+  kind: "wifi" | "ethernet" | "vpn" | "other" | "unknown" | "";
+  method: string;
+}
+
+export interface Condition {
+  key: string;
+  value: string;
+  source: "declared" | "detected";
+  method?: string;
+}
+
+export interface ExpWindow {
+  id: string;
+  role: "baseline" | "intervention";
+  start: string;
+  plannedEnd: string;
+  end: string | null;
+  conditions: Condition[];
+}
+
+export type Phase = "baseline_running" | "awaiting_intervention" | "intervention_running" | "done" | "cancelled";
+export type CompareVerdict =
+  | "melhora"
+  | "piora"
+  | "sem_diferenca_detectavel"
+  | "inconclusivo"
+  | "nao_comparavel"
+  | "dados_insuficientes";
+
+export interface Effect {
+  estimate: number;
+  ciLow: number;
+  ciHigh: number;
+  threshold: number;
+  verdict: CompareVerdict;
+}
+
+export interface ProbeComparison {
+  probeDefId: string;
+  endpoint: string;
+  kind: string;
+  protocolVersion: number;
+  comparable: boolean;
+  reasons: string[];
+  a: { n: number; ok: number; failRate: number; p50Us: number | null; coverage: number };
+  b: { n: number; ok: number; failRate: number; p50Us: number | null; coverage: number };
+  latency: Effect | null;
+  failures: Effect | null;
+  verdict: CompareVerdict;
+}
+
+export interface CompareResult {
+  ruleVersion: string;
+  verdict: CompareVerdict;
+  windows: { role: string; start: string; end: string; measuringMs: number; netChanges: number; netAtStart: NetContext | null }[];
+  probes: ProbeComparison[];
+  findings: { text: string; inputs: string[] }[];
+  alternatives: string[];
+  nextTest: string;
+  caveats: string[];
+}
+
+export interface Experiment {
+  id: string;
+  question: string;
+  intervention: string;
+  plannedWindowMs: number;
+  cancelledAt: string | null;
+  createdAt: string;
+  windows: ExpWindow[];
+  phase: Phase;
+  result: CompareResult | null;
+}
+
 /** Intervalo pedido à API: relativo a agora ou absoluto. */
 export type RangeQuery = { window: string } | { from: Date; to: Date };
 
@@ -199,6 +275,13 @@ export const api = {
   createIncident: (body: { symptom: Symptom; note: string; at?: string }) =>
     call<IncidentDetail>("POST", "/api/v1/incidents", body),
   deleteIncident: (id: string) => call<void>("DELETE", `/api/v1/incidents/${encodeURIComponent(id)}`),
+  network: () => call<NetContext>("GET", "/api/v1/network"),
+  experiments: () => call<Experiment[]>("GET", "/api/v1/experiments"),
+  createExperiment: (body: { question: string; intervention: string; windowMinutes: number; condition: string }) =>
+    call<Experiment>("POST", "/api/v1/experiments", body),
+  startIntervention: (id: string, condition: string) =>
+    call<Experiment>("POST", `/api/v1/experiments/${encodeURIComponent(id)}/intervention`, { condition }),
+  cancelExperiment: (id: string) => call<Experiment>("POST", `/api/v1/experiments/${encodeURIComponent(id)}/cancel`),
   pause: () => call<{ state: CoverageState }>("POST", "/api/v1/pause"),
   resume: () => call<{ state: CoverageState }>("POST", "/api/v1/resume"),
 };

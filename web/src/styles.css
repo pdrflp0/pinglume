@@ -115,6 +115,9 @@ h3 {
 .num {
   font-variant-numeric: tabular-nums;
 }
+td.num {
+  white-space: nowrap;
+}
 .mono {
   font-family: var(--mono);
 }
@@ -560,6 +563,78 @@ tbody th {
   align-items: center;
   gap: 8px;
   margin-top: 12px;
+}
+
+/* Comparação guiada */
+.choices.one-col {
+  grid-template-columns: 1fr;
+}
+.field input {
+  font: inherit;
+  font-weight: 400;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+.steps {
+  margin: 8px 0;
+  padding-left: 22px;
+  display: grid;
+  gap: 10px;
+}
+.steps li {
+  color: var(--muted);
+}
+.steps li.current,
+.steps li.done {
+  color: var(--text);
+}
+.steps li.current::marker {
+  font-weight: 700;
+  color: var(--accent);
+}
+.conds {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  font-size: 0.9rem;
+}
+.cmp-progress progress {
+  display: block;
+  width: 100%;
+  max-width: 420px;
+  margin-top: 4px;
+  accent-color: var(--accent);
+}
+.cmp-form {
+  margin-top: 6px;
+}
+.past {
+  margin-top: 14px;
+}
+.past > summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.past summary.incident-row {
+  list-style: none;
+}
+.cmp-melhora {
+  color: var(--measuring);
+}
+.cmp-piora {
+  color: var(--agent-down);
+}
+.cmp-inconclusivo,
+.cmp-nao_comparavel,
+.cmp-dados_insuficientes {
+  color: var(--muted);
+}
+.cmp-sem_diferenca_detectavel {
+  color: var(--text);
 }
 
 /* Barra de período */

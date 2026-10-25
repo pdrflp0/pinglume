@@ -225,6 +225,8 @@ Para um relato em `t`: janela `[t−5min, t+1min]`. Saída por sonda: cobertura,
 **Avisos** (entram nas alternativas): janelas a mais de 2 h, faixas horárias diferentes, mudança de NetContext não declarada, VPN.
 **Resultado:** diferença de medianas e de taxa de falha por sonda, intervalo por bootstrap em blocos (respeita dependência temporal). `inconclusivo` quando o intervalo cruza zero ou a amostra é pequena. Nunca "culpa da operadora".
 
+**Como implementado (F7):** blocos móveis de ~√n observações, 1000 reamostragens, semente derivada do ID do experimento (resultado reprodutível). Limiar prático: max(10% da mediana de A, 1 ms) para latência e 2 p.p. para falhas. "Melhora/piora" exige intervalo excluindo zero e estimativa além do limiar; "sem diferença detectável" exige o intervalo inteiro dentro do limiar. Latência só é julgada com ≥ 10 execuções ok em cada janela.
+
 ---
 
 ## 7. Segurança da API local

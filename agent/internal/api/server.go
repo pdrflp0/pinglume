@@ -21,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	"pinglume/agent/internal/netctx"
 	"pinglume/agent/internal/store"
 	"pinglume/agent/internal/summary"
 	"pinglume/agent/internal/timeline"
@@ -32,6 +33,7 @@ const sessionCookie = "pinglume_session"
 type Controller interface {
 	State() string
 	SetPaused(ctx context.Context, paused bool) error
+	NetContext() netctx.Context
 }
 
 type Server struct {
@@ -64,6 +66,12 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/v1/incidents", s.require(anyAuth, s.handleCreateIncident))
 	mux.Handle("GET /api/v1/incidents/{id}", s.require(anyAuth, s.handleGetIncident))
 	mux.Handle("DELETE /api/v1/incidents/{id}", s.require(anyAuth, s.handleDeleteIncident))
+	mux.Handle("GET /api/v1/network", s.require(anyAuth, s.handleNetwork))
+	mux.Handle("GET /api/v1/experiments", s.require(anyAuth, s.handleListExperiments))
+	mux.Handle("POST /api/v1/experiments", s.require(anyAuth, s.handleCreateExperiment))
+	mux.Handle("GET /api/v1/experiments/{id}", s.require(anyAuth, s.handleGetExperiment))
+	mux.Handle("POST /api/v1/experiments/{id}/intervention", s.require(anyAuth, s.handleStartIntervention))
+	mux.Handle("POST /api/v1/experiments/{id}/cancel", s.require(anyAuth, s.handleCancelExperiment))
 	mux.Handle("POST /api/v1/pause", s.require(anyAuth, s.handlePause(true)))
 	mux.Handle("POST /api/v1/resume", s.require(anyAuth, s.handlePause(false)))
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {

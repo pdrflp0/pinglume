@@ -211,7 +211,7 @@ func ms(us int64) string {
 	if us < 1000 {
 		return fmt.Sprintf("%d µs", us)
 	}
-	return fmt.Sprintf("%.1f ms", float64(us)/1000)
+	return strings.Replace(fmt.Sprintf("%.1f ms", float64(us)/1000), ".", ",", 1)
 }
 
 var failureLabels = map[string]string{

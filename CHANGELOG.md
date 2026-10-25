@@ -14,10 +14,18 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); 
 - Relatos "travou agora" pelo dashboard (diálogo com sintoma, horário e observação) e pela CLI (`pinglume mark`, `pinglume incidents`), distintos de medições na interface e marcados na linha do tempo.
 - Regra `incident-v1`: janela de 5 min antes a 1 min depois do relato, linha de base das 2 h anteriores, vereditos `aguardando_dados`, `sem_cobertura`, `degradacao_observada` e `sem_degradacao_detectavel`; cada frase traz as entradas que a sustentam, sempre com alternativas, próximo teste e limites. A interpretação fica gravada e imutável quando a janela fecha.
 - Exclusão de relatos, com confirmação, apagando também a interpretação.
+- Detecção do tipo de rede no macOS (rota padrão + `networksetup`, só leitura): interface e tipo (Wi-Fi, cabo, VPN) registrados no início e a cada mudança (`net_context`, `net_change`).
+- Comparação guiada no dashboard: janela A, mudança declarada, janela B, com condições declaradas e detectadas; uma comparação ativa por vez, cancelável.
+- Regra `compare-v1`: pré-condições por sonda (mesma definição, ≥ 10 min, ≥ 80% de cobertura), diferença B − A de mediana e de taxa de falha com intervalo de 95% por bootstrap em blocos (reprodutível por experimento), limiares práticos, vereditos `melhora`, `piora`, `sem_diferenca_detectavel`, `inconclusivo` e `nao_comparavel`, e fatores de confusão apontados. Resultado gravado ao fim.
 
 ### Alterado
 
 - Rótulos de latência agora dizem o que cada tipo de sonda mede (handshake, resolução, requisição completa).
+- Números nos textos das regras e do dashboard usam vírgula decimal.
+
+### Corrigido
+
+- Latências negativas (diferenças) eram exibidas como "-25000 µs" no dashboard.
 
 ### Removido
 

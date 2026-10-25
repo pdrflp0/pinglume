@@ -8,6 +8,7 @@ import {
   type Status,
   type Timeline as TimelineData,
 } from "./api";
+import { ComparisonCard } from "./Comparison";
 import { DataTable } from "./DataTable";
 import { IncidentsCard, ReportDialog } from "./Incidents";
 import { clock, duration, failureLabel, kindMeasure, latency, percent, stateLabel, stateOrder } from "./format";
@@ -191,6 +192,8 @@ export function App() {
             refresh();
           }}
         />
+
+        <ComparisonCard />
 
         <section aria-labelledby="cov-title" className="card">
           <h2 id="cov-title">Cobertura</h2>

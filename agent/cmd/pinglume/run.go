@@ -20,6 +20,7 @@ import (
 	"pinglume/agent/internal/clock"
 	"pinglume/agent/internal/coverage"
 	"pinglume/agent/internal/lock"
+	"pinglume/agent/internal/netctx"
 	"pinglume/agent/internal/runner"
 	"pinglume/agent/internal/sched"
 	"pinglume/agent/internal/store"
@@ -61,6 +62,8 @@ type controller struct {
 }
 
 func (c controller) State() string { return c.r.State() }
+
+func (c controller) NetContext() netctx.Context { return c.r.NetContext() }
 
 func (c controller) SetPaused(ctx context.Context, paused bool) error {
 	done := make(chan error, 1)
@@ -150,6 +153,7 @@ func cmdRun(args []string) error {
 		Jobs:      jobs,
 		Log:       log,
 		Control:   ctl,
+		Net:       &netctx.System{},
 	}
 
 	srv := &api.Server{Store: st, Ctl: controller{r: r, ctl: ctl}, Token: token, Port: c.port,
