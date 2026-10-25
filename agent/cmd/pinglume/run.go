@@ -20,7 +20,7 @@ import (
 	"pinglume/agent/internal/clock"
 	"pinglume/agent/internal/coverage"
 	"pinglume/agent/internal/lock"
-	"pinglume/agent/internal/probe"
+	"pinglume/agent/internal/netctx"
 	"pinglume/agent/internal/runner"
 	"pinglume/agent/internal/sched"
 	"pinglume/agent/internal/store"
@@ -63,6 +63,8 @@ type controller struct {
 
 func (c controller) State() string { return c.r.State() }
 
+func (c controller) NetContext() netctx.Context { return c.r.NetContext() }
+
 func (c controller) SetPaused(ctx context.Context, paused bool) error {
 	done := make(chan error, 1)
 	select {
@@ -82,19 +84,27 @@ func cmdRun(args []string) error {
 	fs := flag.NewFlagSet("run", flag.ExitOnError)
 	var c common
 	c.register(fs)
-	interval := fs.Duration("tcp-interval", 10*time.Second, "intervalo da sonda TCP")
-	timeout := fs.Duration("tcp-timeout", 3*time.Second, "timeout da sonda TCP")
+	var cfg probeConfig
+	fs.DurationVar(&cfg.tcpInterval, "tcp-interval", 10*time.Second, "intervalo da sonda TCP")
+	fs.DurationVar(&cfg.tcpTimeout, "tcp-timeout", 3*time.Second, "timeout da sonda TCP")
+	fs.DurationVar(&cfg.httpsInterval, "https-interval", 60*time.Second, "intervalo da sonda HTTPS")
+	fs.DurationVar(&cfg.httpsTimeout, "https-timeout", 5*time.Second, "timeout da sonda HTTPS")
+	fs.DurationVar(&cfg.dnsInterval, "dns-interval", 30*time.Second, "intervalo da sonda DNS")
+	fs.DurationVar(&cfg.dnsTimeout, "dns-timeout", 3*time.Second, "timeout da sonda DNS")
+	fs.StringVar(&cfg.devCA, "dev-ca", "", "certificado do probe-server local (PEM); ativa a sonda HTTPS nos --dev-target")
+	fs.StringVar(&cfg.serverName, "dev-server-name", "probe.pinglume.test", "nome verificado no certificado do testbed")
+	fs.StringVar(&cfg.zone, "dev-zone", "p.pinglume.test", "zona DNS do testbed")
 	concurrency := fs.Int("concurrency", 2, "sondas simultâneas no máximo")
-	var targets devTargets
-	fs.Var(&targets, "dev-target", "alvo de desenvolvimento label=ip:porta (repetível)")
+	fs.Var(&cfg.targets, "dev-target", "alvo TCP/HTTPS de desenvolvimento label=ip:porta (repetível)")
+	fs.Var(&cfg.resolvers, "dev-dns", "servidor DNS de desenvolvimento label=ip:porta (repetível)")
 	fs.Parse(args)
 
-	if len(targets) == 0 {
+	if len(cfg.targets) == 0 && len(cfg.resolvers) == 0 {
 		return errors.New("nenhum endpoint configurado: os endpoints próprios ainda não estão hospedados; " +
-			"use --dev-target com o probe-server local (veja README)")
+			"use --dev-target/--dev-dns com o probe-server local (veja README)")
 	}
-	if *timeout >= *interval {
-		return errors.New("tcp-timeout precisa ser menor que tcp-interval")
+	if err := cfg.validate(); err != nil {
+		return err
 	}
 
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
@@ -130,19 +140,9 @@ func cmdRun(args []string) error {
 		return err
 	}
 
-	var jobs []sched.Job
-	for _, t := range targets {
-		p := probe.TCPConnect{Addr: t.Addr.String(), Timeout: *timeout}
-		def, err := st.EnsureProbeDefinition(ctx,
-			store.Endpoint{Label: t.Label, Host: t.Addr.Addr().String(), Owner: "dev"},
-			store.ProbeDefinition{
-				Kind: p.Kind(), Target: t.Addr.String(), Interval: *interval, Timeout: *timeout,
-				ProtocolVersion: p.ProtocolVersion(),
-			}, clk.Now())
-		if err != nil {
-			return err
-		}
-		jobs = append(jobs, sched.Job{Def: def, Prober: p})
+	jobs, err := buildJobs(ctx, st, cfg, clk.Now())
+	if err != nil {
+		return err
 	}
 
 	ctl := make(chan runner.Command)
@@ -153,10 +153,11 @@ func cmdRun(args []string) error {
 		Jobs:      jobs,
 		Log:       log,
 		Control:   ctl,
+		Net:       &netctx.System{},
 	}
 
 	srv := &api.Server{Store: st, Ctl: controller{r: r, ctl: ctl}, Token: token, Port: c.port,
-		Version: version, Static: webui.FS()}
+		Version: version, Static: webui.FS(), DeviceID: dev.ID}
 	ln, err := srv.Listen()
 	if err != nil {
 		return fmt.Errorf("API local na porta %d: %w", c.port, err)

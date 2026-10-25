@@ -1,7 +1,17 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { api, ApiError, type CoverageState, type FailureKind, type Status, type Timeline as TimelineData } from "./api";
+import {
+  api,
+  ApiError,
+  type CoverageState,
+  type FailureKind,
+  type IncidentListItem,
+  type Status,
+  type Timeline as TimelineData,
+} from "./api";
+import { ComparisonCard } from "./Comparison";
 import { DataTable } from "./DataTable";
-import { clock, duration, failureLabel, latency, percent, stateLabel, stateOrder } from "./format";
+import { IncidentsCard, ReportDialog } from "./Incidents";
+import { clock, duration, failureLabel, kindMeasure, latency, percent, stateLabel, stateOrder } from "./format";
 import { pan, PRESETS, resolve, select, toQuery, zoom, type ViewRange } from "./range";
 import { rangeLabel } from "./scale";
 import { Timeline } from "./Timeline";
@@ -12,18 +22,29 @@ const BUCKETS = 300;
 interface Load {
   status: Status | null;
   timeline: TimelineData | null;
+  incidents: IncidentListItem[];
   failure: { kind: FailureKind; message: string; since: Date } | null;
   loading: boolean;
 }
 
 function useDashboard(range: ViewRange) {
-  const [load, setLoad] = useState<Load>({ status: null, timeline: null, failure: null, loading: true });
+  const [load, setLoad] = useState<Load>({
+    status: null,
+    timeline: null,
+    incidents: [],
+    failure: null,
+    loading: true,
+  });
 
   const refresh = useCallback(async () => {
     const q = toQuery(range);
     try {
-      const [status, timeline] = await Promise.all([api.status(q), api.timeline(q, BUCKETS)]);
-      setLoad({ status, timeline, failure: null, loading: false });
+      const [status, timeline, incidents] = await Promise.all([
+        api.status(q),
+        api.timeline(q, BUCKETS),
+        api.incidents(q),
+      ]);
+      setLoad({ status, timeline, incidents, failure: null, loading: false });
     } catch (e) {
       const err = e instanceof ApiError ? e : new ApiError("error", String(e));
       // Mantém a última leitura boa e o instante da primeira falha.
@@ -46,8 +67,10 @@ function useDashboard(range: ViewRange) {
 
 export function App() {
   const [range, setRange] = useState<ViewRange>({ live: true, spanMs: PRESETS[0].spanMs });
-  const { status: data, timeline, failure, loading, refresh } = useDashboard(range);
+  const { status: data, timeline, incidents, failure, loading, refresh } = useDashboard(range);
   const [busy, setBusy] = useState(false);
+  const [reporting, setReporting] = useState(false);
+  const [selectedIncident, setSelectedIncident] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -94,7 +117,10 @@ export function App() {
         </div>
         <div className="top-actions">
           <StateChip state={offline ? null : data.state} />
-          <button className="btn" onClick={toggle} disabled={busy || offline}>
+          <button className="btn btn-report" onClick={() => setReporting(true)} disabled={offline}>
+            Travou agora
+          </button>
+          <button className="btn-ghost" onClick={toggle} disabled={busy || offline}>
             {busy ? "Aplicando…" : paused ? "Retomar medição" : "Pausar medição"}
           </button>
         </div>
@@ -103,6 +129,19 @@ export function App() {
       <div className="sr-only" aria-live="polite">
         {announcement}
       </div>
+
+      <ReportDialog
+        open={reporting}
+        onClose={() => setReporting(false)}
+        onCreated={(d) => {
+          setReporting(false);
+          setSelectedIncident(d.incident.id);
+          setAnnouncement(
+            `Relato registrado às ${clock(d.incident.reportedAt)}. A análise fica pronta às ${clock(d.analysis.windowTo)}.`,
+          );
+          refresh();
+        }}
+      />
 
       {offline && (
         <div className="banner banner-warn" role="status">
@@ -131,6 +170,8 @@ export function App() {
             <>
               <Timeline
                 data={timeline}
+                incidents={incidents}
+                onIncident={setSelectedIncident}
                 onSelect={(a, b) => setRange(select(a, b, now))}
                 onZoom={(f, c) => setRange(zoom(range, now, f, c))}
                 onPan={(f) => setRange(pan(range, now, f))}
@@ -140,6 +181,19 @@ export function App() {
             </>
           )}
         </section>
+
+        <IncidentsCard
+          items={incidents}
+          selected={selectedIncident}
+          onSelect={setSelectedIncident}
+          onDeleted={() => {
+            setSelectedIncident(null);
+            setAnnouncement("Relato apagado.");
+            refresh();
+          }}
+        />
+
+        <ComparisonCard />
 
         <section aria-labelledby="cov-title" className="card">
           <h2 id="cov-title">Cobertura</h2>
@@ -323,9 +377,15 @@ function ProbeTable({ probes }: { probes: Status["summary"]["probes"] }) {
                   <td>
                     {p.kind.toUpperCase()} v{p.protocolVersion}
                     <div className="muted small">a cada {duration(p.intervalMs)}</div>
+                    <div className="muted small">{kindMeasure[p.kind] ?? p.kind}</div>
                   </td>
                   <td className="r num">{p.total}</td>
-                  <td className="r num">{percent(p.coverage)}</td>
+                  <td className="r num">
+                    {percent(p.coverage)}
+                    {p.backoffMs > 0 && (
+                      <div className="muted small">{duration(p.backoffMs)} em backoff</div>
+                    )}
+                  </td>
                   <td className="r num">{p.ok}</td>
                   <td>
                     {fails.length === 0 ? (
@@ -350,8 +410,9 @@ function ProbeTable({ probes }: { probes: Status["summary"]["probes"] }) {
         </table>
       </div>
       <p className="muted small">
-        Cobertura: execuções concluídas ÷ esperadas enquanto o agente media. P50/P95: tempo de handshake só das
-        execuções bem-sucedidas. Falhas são rotuladas pelo protocolo da sonda; não são perda de pacotes IP.
+        Cobertura: execuções concluídas ÷ esperadas enquanto o agente media. Backoff: depois de falhas seguidas, o
+        agente amplia o intervalo para não insistir no endpoint, e a cobertura cai de propósito. P50/P95: só execuções
+        bem-sucedidas. Falhas são rotuladas pelo protocolo da sonda; não são perda de pacotes IP.
       </p>
     </>
   );

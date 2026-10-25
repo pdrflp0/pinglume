@@ -115,6 +115,9 @@ h3 {
 .num {
   font-variant-numeric: tabular-nums;
 }
+td.num {
+  white-space: nowrap;
+}
 .mono {
   font-family: var(--mono);
 }
@@ -424,6 +427,216 @@ tbody th {
   overflow-x: auto;
 }
 
+.btn-report {
+  background: var(--agent-down);
+  border-color: var(--agent-down);
+  color: #fff;
+}
+.btn-danger {
+  background: var(--status-critical);
+  border-color: var(--status-critical);
+  color: #fff;
+}
+
+/* Relatos */
+.tl-marks {
+  position: relative;
+}
+.tl-mark {
+  position: absolute;
+  top: 2px;
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  padding: 0;
+  border: 2px solid var(--surface);
+  background: var(--text);
+  transform: rotate(45deg);
+  cursor: pointer;
+}
+.tl-incident {
+  stroke: var(--text);
+  stroke-width: 1.5;
+  stroke-dasharray: 2 3;
+}
+.tag-incident {
+  color: var(--text);
+}
+.incidents {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.incident-row {
+  font: inherit;
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.incident-row.on {
+  border-color: var(--accent);
+}
+.incident-detail {
+  padding: 4px 10px 10px;
+}
+.incident-detail ul {
+  padding-left: 18px;
+  margin: 4px 0;
+}
+.findings li {
+  margin-bottom: 6px;
+}
+.verdict-degradacao_observada {
+  color: var(--agent-down);
+}
+.verdict-sem_degradacao_detectavel {
+  color: var(--text);
+}
+.verdict-sem_cobertura,
+.verdict-aguardando_dados {
+  color: var(--muted);
+}
+
+/* Diálogo */
+.dialog {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  padding: 20px;
+  width: min(440px, calc(100vw - 32px));
+}
+.dialog::backdrop {
+  background: rgba(0, 0, 0, 0.45);
+}
+.dialog h2 {
+  margin-bottom: 4px;
+}
+.choices {
+  border: 0;
+  padding: 0;
+  margin: 12px 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.choices legend {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.choices label {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.field {
+  display: grid;
+  gap: 4px;
+  margin: 10px 0;
+  font-weight: 600;
+}
+.field select,
+.field textarea {
+  font: inherit;
+  font-weight: 400;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+.dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* Comparação guiada */
+.choices.one-col {
+  grid-template-columns: 1fr;
+}
+.field input {
+  font: inherit;
+  font-weight: 400;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+.steps {
+  margin: 8px 0;
+  padding-left: 22px;
+  display: grid;
+  gap: 10px;
+}
+.steps li {
+  color: var(--muted);
+}
+.steps li.current,
+.steps li.done {
+  color: var(--text);
+}
+.steps li.current::marker {
+  font-weight: 700;
+  color: var(--accent);
+}
+.conds {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  font-size: 0.9rem;
+}
+.cmp-progress progress {
+  display: block;
+  width: 100%;
+  max-width: 420px;
+  margin-top: 4px;
+  accent-color: var(--accent);
+}
+.cmp-form {
+  margin-top: 6px;
+}
+.past {
+  margin-top: 14px;
+}
+.past > summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.past summary.incident-row {
+  list-style: none;
+}
+.cmp-melhora {
+  color: var(--measuring);
+}
+.cmp-piora {
+  color: var(--agent-down);
+}
+.cmp-inconclusivo,
+.cmp-nao_comparavel,
+.cmp-dados_insuficientes {
+  color: var(--muted);
+}
+.cmp-sem_diferenca_detectavel {
+  color: var(--text);
+}
+
 /* Barra de período */
 .rangebar {
   display: flex;
@@ -537,6 +750,13 @@ tbody th {
 }
 .tl-fail {
   fill: var(--status-critical);
+}
+.tl-backoff {
+  fill: url(#backoff-dash);
+}
+.hatch-backoff {
+  fill: var(--text);
+  opacity: 0.7;
 }
 .tl-cursor {
   stroke: var(--text);

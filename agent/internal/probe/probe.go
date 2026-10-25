@@ -16,6 +16,9 @@ type Result struct {
 	Duration    time.Duration // monotônico
 	Status      string
 	ErrorDetail string
+	// Phases guarda tempos parciais em µs desde o início (ex.: "connect",
+	// "tls", "ttfb"); vazio quando a sonda não tem fases.
+	Phases map[string]int64
 }
 
 type Prober interface {

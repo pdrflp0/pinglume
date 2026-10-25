@@ -32,6 +32,8 @@ const status: Status = {
         p50Us: 640,
         p95Us: 3100,
         coverage: 0.97,
+        probeDefId: "p1",
+        backoffMs: 0,
         lastStarted: "2026-10-20T21:14:55Z",
       },
     ],
@@ -54,6 +56,7 @@ const timeline: Timeline = {
         { t: Date.parse("2026-10-20T21:01:00Z"), n: 1, ok: 1, p50Us: 600, p95Us: 600, maxUs: 600 },
         { t: Date.parse("2026-10-20T21:01:09Z"), n: 1, ok: 0, fail: { refused: 1 }, p50Us: null, p95Us: null, maxUs: null },
       ],
+      backoff: [],
     },
   ],
   coverage: [
@@ -69,8 +72,50 @@ const timeline: Timeline = {
   events: [],
 };
 
+const detail = {
+  incident: {
+    id: "inc1",
+    reportedAt: "2026-10-20T21:10:00Z",
+    createdAt: "2026-10-20T21:10:00Z",
+    symptom: "audio_cut",
+    note: "",
+    createdVia: "dashboard",
+  },
+  analysis: {
+    ruleVersion: "incident-v1",
+    verdict: "degradacao_observada",
+    windowFrom: "2026-10-20T21:05:00Z",
+    windowTo: "2026-10-20T21:11:00Z",
+    baselineFrom: "2026-10-20T19:05:00Z",
+    measuringMs: 360_000,
+    windowMs: 360_000,
+    probes: [],
+    findings: [
+      { text: "TCP (ep-1) falhou em 5 de 36 execuções na janela.", inputs: ["janela: 36 execuções"] },
+      { text: "A degradação coincide com o relato no tempo. Isso não prova que ela causou o problema.", inputs: ["regra incident-v1"] },
+    ],
+    alternatives: ["Problema no trecho entre este computador e a internet."],
+    nextTest: "Faça uma comparação guiada por cabo.",
+    caveats: [],
+    final: true,
+  },
+};
+
+let incidents: unknown[] = [];
+let experiments: unknown[] = [];
+const wifi = { interface: "en0", kind: "wifi", method: "teste" };
+
 /** Responde por rota, como o agente. */
 function route(url: string, init?: RequestInit) {
+  if (url === "/api/v1/network") return respond(wifi);
+  if (url === "/api/v1/experiments" && init?.method === "POST") return respond({}, { status: 201 });
+  if (url.startsWith("/api/v1/experiments")) return respond(experiments);
+  if (url === "/api/v1/incidents" && init?.method === "POST") {
+    incidents = [{ ...detail.incident, verdict: "degradacao_observada", final: true }];
+    return respond(detail, { status: 201 });
+  }
+  if (url.startsWith("/api/v1/incidents/")) return respond(detail);
+  if (url.startsWith("/api/v1/incidents")) return respond(incidents);
   if (init?.method === "POST") return respond({ state: "paused" });
   if (url.startsWith("/api/v1/timeline")) return respond(timeline);
   return respond(status);
@@ -83,6 +128,8 @@ function respond(body: unknown, init: ResponseInit = { status: 200 }) {
 let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
+  incidents = [];
+  experiments = [];
   vi.useFakeTimers({ shouldAdvanceTime: true });
   fetchMock = vi.fn();
   vi.stubGlobal("fetch", fetchMock);
@@ -171,4 +218,146 @@ test("zoom pelo teclado fixa o período e oferece voltar ao vivo", async () => {
   fireEvent.keyDown(plot, { key: "Escape" });
   await act(async () => {});
   expect(screen.queryByText("Voltar ao vivo")).toBeNull();
+});
+
+test("relatar: diálogo envia o sintoma e a análise aparece com ressalva de causalidade", async () => {
+  fetchMock.mockImplementation(route);
+  render(<App />);
+  fireEvent.click(await screen.findByRole("button", { name: "Travou agora" }));
+  fireEvent.click(screen.getByLabelText("Vídeo congelou"));
+  fireEvent.click(screen.getByText("Registrar relato"));
+
+  const post = await vi.waitFor(() => {
+    const c = fetchMock.mock.calls.find(([u, i]) => u === "/api/v1/incidents" && i?.method === "POST");
+    if (!c) throw new Error("POST ainda não feito");
+    return c;
+  });
+  expect(JSON.parse(post[1].body)).toMatchObject({ symptom: "video_freeze", note: "" });
+
+  expect(await screen.findByText(/falhou em 5 de 36/)).toBeTruthy();
+  expect(screen.getByText(/não prova que ela causou/)).toBeTruthy();
+  expect(screen.getAllByText("Degradação observada").length).toBeGreaterThan(0);
+  // O relato aparece na linha do tempo como marca própria, distinta das medições.
+  expect(screen.getByLabelText(/Relato: Áudio cortou às/)).toBeTruthy();
+});
+
+test("apagar relato pede confirmação", async () => {
+  incidents = [{ ...detail.incident, verdict: "degradacao_observada", final: true }];
+  fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+    if (init?.method === "DELETE") return Promise.resolve(new Response(null, { status: 204 }));
+    return route(url, init);
+  });
+  render(<App />);
+  fireEvent.click(await screen.findByRole("button", { name: /Áudio cortou/, expanded: false }));
+  fireEvent.click(await screen.findByText("Apagar relato"));
+  expect(fetchMock.mock.calls.some(([, i]) => i?.method === "DELETE")).toBe(false);
+  fireEvent.click(screen.getByText("Apagar"));
+  await vi.waitFor(() => {
+    if (!fetchMock.mock.calls.some(([u, i]) => u === "/api/v1/incidents/inc1" && i?.method === "DELETE")) {
+      throw new Error("DELETE não enviado");
+    }
+  });
+});
+
+const baseWin = {
+  id: "w1",
+  role: "baseline",
+  start: "2026-10-24T20:00:00Z",
+  plannedEnd: "2026-10-24T20:10:00Z",
+  end: null,
+  conditions: [
+    { key: "conexão", value: "Wi-Fi", source: "declared" },
+    { key: "interface", value: "wifi (en0)", source: "detected", method: "teste" },
+  ],
+};
+
+test("nova comparação envia pergunta, mudança e condição declarada", async () => {
+  fetchMock.mockImplementation(route);
+  render(<App />);
+  fireEvent.click(await screen.findByText("Nova comparação"));
+  expect(screen.getByText("Wi-Fi (en0)")).toBeTruthy();
+  fireEvent.click(screen.getByText("Começar janela A"));
+  const post = await vi.waitFor(() => {
+    const c = fetchMock.mock.calls.find(([u, i]) => u === "/api/v1/experiments" && i?.method === "POST");
+    if (!c) throw new Error("POST ainda não feito");
+    return c;
+  });
+  expect(JSON.parse(post[1].body)).toEqual({
+    question: "O cabo melhora em relação ao Wi-Fi?",
+    intervention: "trocar o Wi-Fi por cabo",
+    windowMinutes: 10,
+    condition: "Wi-Fi",
+  });
+});
+
+test("antes da janela B avisa quando a interface detectada não mudou", async () => {
+  experiments = [
+    {
+      id: "e1",
+      question: "O cabo melhora em relação ao Wi-Fi?",
+      intervention: "trocar o Wi-Fi por cabo",
+      plannedWindowMs: 600000,
+      cancelledAt: null,
+      createdAt: "2026-10-24T20:00:00Z",
+      windows: [baseWin],
+      phase: "awaiting_intervention",
+      result: null,
+    },
+  ];
+  fetchMock.mockImplementation(route);
+  render(<App />);
+  expect(await screen.findByText(/É a mesma da janela A/)).toBeTruthy();
+  expect(screen.getByText("(detectada)")).toBeTruthy();
+  expect(screen.getByText("Começar janela B")).toBeTruthy();
+});
+
+test("resultado mostra intervalo, veredito por sonda e motivo de não comparável", async () => {
+  experiments = [
+    {
+      id: "e2",
+      question: "O cabo melhora em relação ao Wi-Fi?",
+      intervention: "trocar o Wi-Fi por cabo",
+      plannedWindowMs: 600000,
+      cancelledAt: null,
+      createdAt: "2026-10-24T20:00:00Z",
+      windows: [baseWin, { ...baseWin, id: "w2", role: "intervention" }],
+      phase: "done",
+      result: {
+        ruleVersion: "compare-v1",
+        verdict: "melhora",
+        windows: [
+          { role: "baseline", start: "2026-10-24T20:00:00Z", end: "2026-10-24T20:10:00Z", measuringMs: 600000, netChanges: 0, netAtStart: wifi },
+          { role: "intervention", start: "2026-10-24T20:12:00Z", end: "2026-10-24T20:22:00Z", measuringMs: 600000, netChanges: 0, netAtStart: wifi },
+        ],
+        probes: [
+          {
+            probeDefId: "p1", endpoint: "ep-1", kind: "https", protocolVersion: 1, comparable: true, reasons: [],
+            a: { n: 120, ok: 120, failRate: 0, p50Us: 28000, coverage: 1 },
+            b: { n: 120, ok: 120, failRate: 0, p50Us: 3000, coverage: 1 },
+            latency: { estimate: -25000, ciLow: -25600, ciHigh: -24400, threshold: 2800, verdict: "melhora" },
+            failures: { estimate: 0, ciLow: 0, ciHigh: 0, threshold: 0.02, verdict: "sem_diferenca_detectavel" },
+            verdict: "melhora",
+          },
+          {
+            probeDefId: "p2", endpoint: "ep-1", kind: "dns", protocolVersion: 1, comparable: false,
+            reasons: ["cobertura de 40% na janela B (mínimo 80%)"],
+            a: { n: 120, ok: 120, failRate: 0, p50Us: 900, coverage: 1 },
+            b: { n: 48, ok: 48, failRate: 0, p50Us: 900, coverage: 0.4 },
+            latency: null, failures: null, verdict: "nao_comparavel",
+          },
+        ],
+        findings: [{ text: "HTTPS (ep-1): mediana 28,00 ms em A e 3,00 ms em B.", inputs: ["A: 120 ok de 120"] }],
+        alternatives: ["Variação natural da rede ao longo do tempo, sem relação com a mudança."],
+        nextTest: "Confirme repetindo na ordem inversa.",
+        caveats: ["A janela B veio depois da A: mudança e horário se confundem numa única rodada."],
+      },
+    },
+  ];
+  fetchMock.mockImplementation(route);
+  render(<App />);
+  fireEvent.click(await screen.findByText(/Comparações anteriores/));
+  expect(screen.getByText("-25,0 ms (-25,6 ms a -24,4 ms)")).toBeTruthy();
+  expect(screen.getByText("cobertura de 40% na janela B (mínimo 80%)")).toBeTruthy();
+  expect(screen.getAllByText("Não comparável").length).toBeGreaterThan(0);
+  expect(screen.getByText(/mudança e horário se confundem/)).toBeTruthy();
 });

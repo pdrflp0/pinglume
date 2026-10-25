@@ -13,6 +13,7 @@ import (
 	"testing/fstest"
 	"time"
 
+	"pinglume/agent/internal/netctx"
 	"pinglume/agent/internal/store"
 )
 
@@ -32,6 +33,10 @@ func (f *fakeCtl) State() string {
 		return "paused"
 	}
 	return "measuring"
+}
+
+func (f *fakeCtl) NetContext() netctx.Context {
+	return netctx.Context{Interface: "en0", Kind: netctx.KindWiFi, Method: "teste"}
 }
 
 func (f *fakeCtl) SetPaused(_ context.Context, p bool) error {
@@ -55,7 +60,8 @@ func newEnv(t *testing.T) *env {
 	}
 	t.Cleanup(func() { st.Close() })
 	ctl := &fakeCtl{}
-	s := &Server{Store: st, Ctl: ctl, Token: strings.Repeat("a", 64), Port: port, Version: "t",
+	dev, _ := st.EnsureDevice(context.Background(), store.Device{Name: "t", AgentVersion: "t"}, time.Now())
+	s := &Server{Store: st, Ctl: ctl, Token: strings.Repeat("a", 64), Port: port, Version: "t", DeviceID: dev.ID,
 		Static: fstest.MapFS{"index.html": {Data: []byte("<!doctype html><title>Pinglume</title>")},
 			"assets/app.js": {Data: []byte("console.log(1)")}}}
 	return &env{h: s.Handler(), token: s.Token, ctl: ctl}
@@ -68,7 +74,11 @@ func withHeader(k, v string) reqOpt    { return func(r *http.Request) { r.Header
 func withCookie(c *http.Cookie) reqOpt { return func(r *http.Request) { r.AddCookie(c) } }
 
 func (e *env) do(method, path string, opts ...reqOpt) *httptest.ResponseRecorder {
-	r := httptest.NewRequest(method, "http://"+host+path, nil)
+	return e.doBody(method, path, "", opts...)
+}
+
+func (e *env) doBody(method, path, body string, opts ...reqOpt) *httptest.ResponseRecorder {
+	r := httptest.NewRequest(method, "http://"+host+path, strings.NewReader(body))
 	r.Host = host
 	for _, o := range opts {
 		o(r)
@@ -284,6 +294,73 @@ func TestTimelineValidation(t *testing.T) {
 		"?from=2026-10-01T00:00:00Z&to=2026-10-20T00:00:00Z", "?from=2026-10-20T00:00:00Z&to=2026-10-20T00:00:01Z"} {
 		if w := e.do("GET", "/api/v1/timeline"+q, e.bearer()); w.Code != http.StatusBadRequest {
 			t.Errorf("%s: esperava 400, veio %d", q, w.Code)
+		}
+	}
+}
+
+func TestIncidentLifecycle(t *testing.T) {
+	e := newEnv(t)
+	w := e.doBody("POST", "/api/v1/incidents", `{"symptom":"audio_cut","note":"reunião das 20h"}`, e.bearer())
+	if w.Code != http.StatusCreated {
+		t.Fatalf("criar: %d %s", w.Code, w.Body)
+	}
+	var created struct {
+		Incident struct{ ID, Symptom, CreatedVia, Note string }
+		Analysis struct {
+			Verdict     string
+			RuleVersion string
+			Final       bool
+		}
+	}
+	json.Unmarshal(w.Body.Bytes(), &created)
+	if created.Incident.CreatedVia != "cli" || created.Analysis.RuleVersion != "incident-v1" || created.Analysis.Final {
+		t.Fatalf("resposta: %+v", created)
+	}
+	if created.Analysis.Verdict != "aguardando_dados" {
+		t.Fatalf("relato recém-criado deveria aguardar a janela fechar: %s", created.Analysis.Verdict)
+	}
+
+	// Pelo navegador: sessão + Origin.
+	c := e.login(t)
+	w = e.doBody("POST", "/api/v1/incidents", `{"symptom":"slow"}`, withCookie(c), withHeader("Origin", "http://"+host))
+	if w.Code != http.StatusCreated || !strings.Contains(w.Body.String(), `"createdVia":"dashboard"`) {
+		t.Fatalf("criar pelo navegador: %d %s", w.Code, w.Body)
+	}
+	// Outro site não cria relatos.
+	if w := e.doBody("POST", "/api/v1/incidents", `{"symptom":"slow"}`, withCookie(c), withHeader("Origin", "https://evil.example")); w.Code != http.StatusForbidden {
+		t.Fatalf("cross-origin: %d", w.Code)
+	}
+
+	w = e.do("GET", "/api/v1/incidents", e.bearer())
+	var list []struct{ ID, Verdict string }
+	json.Unmarshal(w.Body.Bytes(), &list)
+	if len(list) != 2 {
+		t.Fatalf("lista: %s", w.Body)
+	}
+	if w := e.do("GET", "/api/v1/incidents/"+created.Incident.ID, e.bearer()); w.Code != 200 {
+		t.Fatalf("detalhe: %d", w.Code)
+	}
+	if w := e.do("DELETE", "/api/v1/incidents/"+created.Incident.ID, e.bearer()); w.Code != http.StatusNoContent {
+		t.Fatalf("apagar: %d", w.Code)
+	}
+	if w := e.do("GET", "/api/v1/incidents/"+created.Incident.ID, e.bearer()); w.Code != http.StatusNotFound {
+		t.Fatalf("depois de apagar: %d", w.Code)
+	}
+}
+
+func TestIncidentValidation(t *testing.T) {
+	e := newEnv(t)
+	future := time.Now().Add(time.Hour).UTC().Format(time.RFC3339)
+	old := time.Now().Add(-48 * time.Hour).UTC().Format(time.RFC3339)
+	for _, body := range []string{
+		`{"symptom":"desconhecido"}`,
+		`{"symptom":"slow","at":"` + future + `"}`,
+		`{"symptom":"slow","at":"` + old + `"}`,
+		`{"symptom":"slow","note":"` + strings.Repeat("x", 501) + `"}`,
+		`não é json`,
+	} {
+		if w := e.doBody("POST", "/api/v1/incidents", body, e.bearer()); w.Code != http.StatusBadRequest {
+			t.Errorf("%.40s: esperava 400, veio %d", body, w.Code)
 		}
 	}
 }

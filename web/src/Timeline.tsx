@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
-import type { Bucket, CoverageState, Series, Timeline as TimelineData } from "./api";
-import { duration, failureLabel, latency, stateLabel } from "./format";
+import type { Bucket, CoverageState, IncidentListItem, Series, Timeline as TimelineData } from "./api";
+import { duration, failureLabel, kindMeasure, latency, stateLabel, symptomLabel } from "./format";
 import { niceMax, tickLabel, timeTicks } from "./scale";
 
 const M = { left: 56, right: 14 };
@@ -76,13 +76,15 @@ function failures(b: Bucket): number {
 
 interface Props {
   data: TimelineData;
+  incidents: IncidentListItem[];
+  onIncident: (id: string) => void;
   onSelect: (from: number, to: number) => void;
   onZoom: (factor: number, center?: number) => void;
   onPan: (fraction: number) => void;
   onLive: () => void;
 }
 
-export function Timeline({ data, onSelect, onZoom, onPan, onLive }: Props) {
+export function Timeline({ data, incidents, onIncident, onSelect, onZoom, onPan, onLive }: Props) {
   const from = Date.parse(data.from);
   const to = Date.parse(data.to);
   const span = to - from;
@@ -183,10 +185,17 @@ export function Timeline({ data, onSelect, onZoom, onPan, onLive }: Props) {
   const strokeY = (us: number) => PLOT_H - Math.min(1, us / 1000 / yMax) * PLOT_H;
   const yTicks = [0, yMax / 2, yMax];
   const cursorX = cursorT === null ? null : x(cursorT + bucketMs / 2);
+  // Relatos são marcados à parte das medições: losango acima da faixa de
+  // cobertura e linha tracejada atravessando os painéis.
+  const marks = incidents
+    .map((i) => ({ ...i, t: Date.parse(i.reportedAt) }))
+    .filter((i) => i.t >= from && i.t <= to);
+  const markLines = (h: number) =>
+    marks.map((m) => <line key={m.id} x1={x(m.t)} x2={x(m.t)} y1={0} y2={h} className="tl-incident" />);
 
   return (
     <div className="tl">
-      <Readout data={data} cursorT={cursorT} segs={segs} />
+      <Readout data={data} cursorT={cursorT} segs={segs} marks={marks} />
       <div
         ref={wrap}
         className="tl-plot"
@@ -200,6 +209,19 @@ export function Timeline({ data, onSelect, onZoom, onPan, onLive }: Props) {
         onPointerUp={onPointerUp}
         onPointerLeave={() => !brush && setCursor(null)}
       >
+        <div className="tl-marks" style={{ height: marks.length ? 18 : 0 }}>
+          {marks.map((m) => (
+            <button
+              key={m.id}
+              className="tl-mark"
+              style={{ left: x(m.t) }}
+              onClick={() => onIncident(m.id)}
+              onPointerDown={(e) => e.stopPropagation()}
+              aria-label={`Relato: ${symptomLabel[m.symptom]} às ${bucketFmt.format(m.t)}`}
+              title={`Relato: ${symptomLabel[m.symptom]}`}
+            />
+          ))}
+        </div>
         <svg width={width} height={STRIP_H + 22} className="tl-svg" aria-hidden="true">
           <Patterns />
           <text x={M.left - 8} y={STRIP_H - 2} className="tl-axis-label" textAnchor="end">
@@ -216,6 +238,7 @@ export function Timeline({ data, onSelect, onZoom, onPan, onLive }: Props) {
               className={`cov cov-${s.state}`}
             />
           ))}
+          {markLines(STRIP_H)}
           {cursorX !== null && <line x1={cursorX} x2={cursorX} y1={0} y2={STRIP_H} className="tl-cursor" />}
         </svg>
 
@@ -233,7 +256,8 @@ export function Timeline({ data, onSelect, onZoom, onPan, onLive }: Props) {
                 <strong>{s.endpoint}</strong>
                 <span className="muted">
                   {" "}
-                  · {s.kind.toUpperCase()} v{s.protocolVersion} · {s.target} · a cada {duration(s.intervalMs)}
+                  · {s.kind.toUpperCase()} v{s.protocolVersion} · {kindMeasure[s.kind] ?? s.kind} · {s.target} · a
+                  cada {duration(s.intervalMs)}
                 </span>
               </div>
               <svg width={width} height={PLOT_H + FAIL_H + 10} className="tl-svg" aria-hidden="true">
@@ -245,6 +269,16 @@ export function Timeline({ data, onSelect, onZoom, onPan, onLive }: Props) {
                     width={Math.max(1, x(g.end) - x(g.start))}
                     height={PLOT_H}
                     className={`gapband cov-${g.state}`}
+                  />
+                ))}
+                {s.backoff.map((b) => (
+                  <rect
+                    key={b.start}
+                    x={x(Date.parse(b.start))}
+                    y={0}
+                    width={Math.max(2, x(Date.parse(b.end)) - x(Date.parse(b.start)))}
+                    height={4}
+                    className="tl-backoff"
                   />
                 ))}
                 {yTicks.map((v) => (
@@ -293,6 +327,7 @@ export function Timeline({ data, onSelect, onZoom, onPan, onLive }: Props) {
                     />
                   );
                 })}
+                {markLines(PLOT_H + 6 + FAIL_H)}
                 {cursorX !== null && (
                   <line x1={cursorX} x2={cursorX} y1={0} y2={PLOT_H + 6 + FAIL_H} className="tl-cursor" />
                 )}
@@ -317,9 +352,11 @@ export function Timeline({ data, onSelect, onZoom, onPan, onLive }: Props) {
         )}
       </div>
       <p id="tl-help" className="muted small">
-        Linha: tempo de handshake (mediana); faixa clara: até o p95, só execuções bem-sucedidas. Barras de falha:
-        fração das execuções que falharam no trecho. Áreas hachuradas: sem medição. Arraste para aproximar. No
-        teclado: ←/→ percorre, Shift+←/→ desloca, + e − aproximam e afastam, Esc volta ao vivo.
+        Linha: mediana do tempo da sonda (o título de cada painel diz o que ela mede); faixa clara: até o p95, só
+        execuções bem-sucedidas. Barras de falha: fração das execuções que falharam no trecho. Traço tracejado no
+        topo do painel: sonda em backoff (intervalo ampliado após falhas seguidas). Áreas hachuradas: sem medição.
+        Losango acima da cobertura e linha tracejada: um relato seu (não é medição). Arraste para aproximar. No teclado: ←/→ percorre, Shift+←/→ desloca, + e − aproximam e afastam, Esc volta ao
+        vivo.
       </p>
     </div>
   );
@@ -352,13 +389,26 @@ function Patterns() {
           <rect width={state === "unrecorded" ? 1 : 2.5} height={size} className={`hatch hatch-${state}`} />
         </pattern>
       ))}
+      <pattern id="backoff-dash" width={7} height={4} patternUnits="userSpaceOnUse">
+        <rect width={4} height={4} className="hatch-backoff" />
+      </pattern>
     </defs>
   );
 }
 
 const bucketFmt = new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
-function Readout({ data, cursorT, segs }: { data: TimelineData; cursorT: number | null; segs: Segment[] }) {
+function Readout({
+  data,
+  cursorT,
+  segs,
+  marks,
+}: {
+  data: TimelineData;
+  cursorT: number | null;
+  segs: Segment[];
+  marks: (IncidentListItem & { t: number })[];
+}) {
   if (cursorT === null) {
     return (
       <div className="tl-readout muted" aria-live="polite">
@@ -369,6 +419,7 @@ function Readout({ data, cursorT, segs }: { data: TimelineData; cursorT: number 
   const end = cursorT + data.bucketMs;
   const mid = cursorT + data.bucketMs / 2;
   const seg = segs.find((s) => s.start <= mid && s.end > mid);
+  const here = marks.filter((m) => m.t >= cursorT && m.t < end);
   return (
     <div className="tl-readout" aria-live="polite">
       <div className="tl-readout-head">
@@ -376,10 +427,16 @@ function Readout({ data, cursorT, segs }: { data: TimelineData; cursorT: number 
           {bucketFmt.format(cursorT)} – {bucketFmt.format(end)}
         </strong>
         {seg && <span className={`tag tag-${seg.state}`}>{stateLabel[seg.state]}</span>}
+        {here.map((m) => (
+          <span key={m.id} className="tag tag-incident">
+            Relato: {symptomLabel[m.symptom]}
+          </span>
+        ))}
       </div>
       <ul>
         {data.series.map((s) => {
           const b = s.buckets.find((x) => x.t === cursorT);
+          const inBackoff = s.backoff.some((k) => Date.parse(k.start) <= mid && Date.parse(k.end) > mid);
           return (
             <li key={s.probeDefId}>
               <span className="tl-readout-name">
@@ -404,6 +461,7 @@ function Readout({ data, cursorT, segs }: { data: TimelineData; cursorT: number 
               ) : (
                 <span className="muted">nenhuma execução começou neste trecho</span>
               )}
+              {inBackoff && <span className="muted"> · em backoff</span>}
             </li>
           );
         })}

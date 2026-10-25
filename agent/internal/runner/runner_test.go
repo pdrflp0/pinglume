@@ -6,11 +6,14 @@ import (
 	"log/slog"
 	"net"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"pinglume/agent/internal/clock"
 	"pinglume/agent/internal/coverage"
+	"pinglume/agent/internal/netctx"
 	"pinglume/agent/internal/probe"
 	"pinglume/agent/internal/sched"
 	"pinglume/agent/internal/store"
@@ -142,5 +145,65 @@ func TestPauseStopsMeasuringAndSurvivesRestart(t *testing.T) {
 	}
 	if !sawPaused {
 		t.Fatalf("intervalo de pausa ausente: %+v", ivs)
+	}
+}
+
+type fakeNet struct {
+	mu  sync.Mutex
+	cur netctx.Context
+}
+
+func (f *fakeNet) Detect(context.Context) netctx.Context {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.cur
+}
+
+func (f *fakeNet) set(c netctx.Context) {
+	f.mu.Lock()
+	f.cur = c
+	f.mu.Unlock()
+}
+
+func TestNetChangeEvents(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.Open(ctx, filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	clk := clock.System{}
+	dev, _ := st.EnsureDevice(ctx, store.Device{Name: "t", AgentVersion: "t"}, clk.Now())
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	net := &fakeNet{cur: netctx.Context{Interface: "en0", Kind: netctx.KindWiFi}}
+	r := &Runner{
+		Store:     st,
+		Tracker:   &coverage.Tracker{Store: st, Clock: clk, DeviceID: dev.ID, Heartbeat: 30 * time.Millisecond},
+		Scheduler: &sched.Scheduler{Store: st, Clock: clk, DeviceID: dev.ID, Concurrency: 1, Log: log},
+		Log:       log,
+		Control:   make(chan Command),
+		Net:       net,
+	}
+	runCtx, cancel := context.WithCancel(ctx)
+	done := make(chan error, 1)
+	go func() { done <- r.Run(runCtx) }()
+	time.Sleep(100 * time.Millisecond)
+	net.set(netctx.Context{Interface: "en5", Kind: netctx.KindEthernet})
+	time.Sleep(100 * time.Millisecond)
+	cancel()
+	<-done
+
+	evs, _ := st.SystemEvents(ctx, time.Now().Add(-time.Minute), time.Now())
+	var kinds []string
+	for _, e := range evs {
+		if e.Kind == "net_context" || e.Kind == "net_change" {
+			kinds = append(kinds, e.Kind+":"+e.Detail)
+		}
+	}
+	if len(kinds) != 2 || !strings.HasPrefix(kinds[0], "net_context:") || !strings.Contains(kinds[1], `"en5"`) {
+		t.Fatalf("eventos de rede: %v", kinds)
+	}
+	if r.NetContext().Kind != netctx.KindEthernet {
+		t.Fatalf("contexto atual: %+v", r.NetContext())
 	}
 }

@@ -31,6 +31,9 @@ jobs:
       - name: testes do agente (com detector de corrida)
         working-directory: agent
         run: go test -race -count=1 ./...
+      - name: testes do probe-server
+        working-directory: probe-server
+        run: go test -race -count=1 ./...
 
   web:
     name: Dashboard
