@@ -15,7 +15,8 @@ Ferramenta local para investigar falhas intermitentes de internet durante chamad
 | F4 linha do tempo com lacunas, zoom, teclado e tabela equivalente | feito e testado |
 | F5 sondas DNS e HTTPS, backoff e injeção de falhas no probe-server | feito e testado |
 | F6 relatos ("travou agora") e análise `incident-v1` | feito e testado |
-| F7 em diante | ver backlog no documento de desenho |
+| F7 comparação guiada `compare-v1` e detecção do tipo de rede | feito e testado |
+| F8 em diante | ver backlog no documento de desenho |
 
 ## Rodar localmente
 
@@ -67,6 +68,18 @@ agent/bin/pinglume incidents --data-dir .dev-data
 
 A análise (regra `incident-v1`) olha as medições de 5 min antes a 1 min depois do relato, compara com as 2 h anteriores e só fica definitiva quando essa janela fecha. Ela sempre lista outras explicações e um próximo teste, e nunca apresenta coincidência no tempo como causa.
 
+### Comparação guiada
+
+No dashboard, **Nova comparação** mede uma janela A (como está), pede a mudança (ex.: cabo no lugar do Wi-Fi) e mede uma janela B. Cada janela registra a condição declarada e a interface detectada (rota padrão + `networksetup`, só leitura).
+
+A regra `compare-v1`:
+
+- só compara uma sonda se ela tiver a mesma definição nas duas janelas, cada janela com pelo menos 10 min e cobertura de pelo menos 80%; senão, mostra "não comparável" e o motivo;
+- calcula a diferença B − A da mediana de latência e da taxa de falha com intervalo de 95% por **bootstrap em blocos**, porque medições vizinhas no tempo não são independentes;
+- só diz "melhora" ou "piora" quando o intervalo exclui zero **e** a diferença passa de um limiar prático (10% da mediana de A ou 1 ms, o que for maior — abaixo de 1 ms a diferença não muda uma chamada; 2 p.p. para falhas); "sem diferença detectável" exige o intervalo inteiro dentro do limiar; o resto é "inconclusivo";
+- melhora numa medida e piora na outra vira "inconclusivo";
+- aponta fatores de confusão: janelas distantes no tempo, interface que mudou durante a janela, VPN, e interface detectada igual nas duas janelas apesar da mudança declarada.
+
 Pausar e retomar (a pausa persiste se o agente reiniciar):
 
 ```bash
@@ -112,7 +125,10 @@ Branches, versionamento (SemVer) e convenção de commits: [docs/fluxo-git.md](d
 - Em backoff (até 8× o intervalo), a volta de uma sonda demora mais para aparecer: no ensaio, o DNS restaurado só foi medido ~22 s depois.
 - Sonda UDP (perda e jitter) é a fatia F12.
 - Os limiares da `incident-v1` (50% de cobertura, latência 2× a mediana e acima do p95 da base, 10 execuções ok de base) são escolhas iniciais, ainda não calibradas com uso real.
-- O NetContext (Wi-Fi × cabo) ainda não é coletado; a linha de base compara com as 2 h anteriores mesmo que a rede tenha mudado.
+- A `incident-v1` ainda não usa o tipo de rede: a linha de base compara com as 2 h anteriores mesmo que a rede tenha mudado (os eventos `net_change` já são gravados).
+- A comparação tem uma rodada A→B: mudança e horário se confundem, e o resultado sempre diz isso. Blocos repetidos (A-B-A) ficam para o Nível 2.
+- A detecção de rede só existe no macOS; em outras plataformas a condição é apenas a declarada.
+- Ainda não há comando de CLI para a comparação; ela é feita pelo dashboard (ou direto pela API).
 - Alvos de desenvolvimento precisam ser loopback ou rede privada; o agente recusa outros.
 - A detecção de suspensão compara relógio civil e monotônico. Ela não distingue sono de relógio adiantado manualmente (o motivo registrado diz isso) e ainda não foi validada com o Mac dormindo de verdade.
 - Depois de um crash, a lacuna começa no último heartbeat (a cada 5 s): o instante exato da queda tem até 5 s de incerteza.

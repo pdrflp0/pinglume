@@ -50,3 +50,13 @@ test("segmentos de cobertura preenchem buracos com 'sem registro'", () => {
   expect(segs[0].start).toBe(from); // recortado ao período
   expect(segs.at(-1)!.end).toBe(to);
 });
+
+import { latency } from "./format";
+
+test("latência formata sinal, unidade e vírgula", () => {
+  expect(latency(640)).toBe("640 µs");
+  expect(latency(-640)).toBe("-640 µs");
+  expect(latency(3100)).toBe("3,10 ms");
+  expect(latency(-25000)).toBe("-25,0 ms");
+  expect(latency(null)).toBe("—");
+});

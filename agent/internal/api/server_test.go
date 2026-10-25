@@ -13,6 +13,7 @@ import (
 	"testing/fstest"
 	"time"
 
+	"pinglume/agent/internal/netctx"
 	"pinglume/agent/internal/store"
 )
 
@@ -32,6 +33,10 @@ func (f *fakeCtl) State() string {
 		return "paused"
 	}
 	return "measuring"
+}
+
+func (f *fakeCtl) NetContext() netctx.Context {
+	return netctx.Context{Interface: "en0", Kind: netctx.KindWiFi, Method: "teste"}
 }
 
 func (f *fakeCtl) SetPaused(_ context.Context, p bool) error {

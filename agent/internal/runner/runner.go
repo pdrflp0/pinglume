@@ -5,11 +5,13 @@ package runner
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"sync/atomic"
 	"time"
 
 	"pinglume/agent/internal/coverage"
+	"pinglume/agent/internal/netctx"
 	"pinglume/agent/internal/sched"
 	"pinglume/agent/internal/store"
 )
@@ -28,8 +30,40 @@ type Runner struct {
 	Control <-chan Command
 	// OnState, se definido, é chamado após cada mudança de estado (testes).
 	OnState func(state string)
+	// Net, se definido, é consultado a cada heartbeat; mudanças de interface
+	// viram eventos net_change (fator de confusão nas comparações).
+	Net netctx.Detector
 
 	state atomic.Value // string
+	net   atomic.Value // netctx.Context
+}
+
+// NetContext devolve a última interface detectada; seguro para outras goroutines.
+func (r *Runner) NetContext() netctx.Context {
+	v, _ := r.net.Load().(netctx.Context)
+	return v
+}
+
+// checkNet detecta a interface e grava um evento quando ela muda.
+func (r *Runner) checkNet(ctx context.Context, first bool) {
+	if r.Net == nil {
+		return
+	}
+	cur := r.Net.Detect(ctx)
+	prev, had := r.net.Load().(netctx.Context)
+	if had && prev.Equal(cur) {
+		return
+	}
+	r.net.Store(cur)
+	kind := "net_change"
+	if first {
+		kind = "net_context" // estado inicial desta execução
+	}
+	d, _ := json.Marshal(cur)
+	r.Store.InsertSystemEvent(ctx, r.Tracker.Clock.Now(), kind, string(d))
+	if !first {
+		r.Log.Warn("rede mudou", "interface", cur.Interface, "tipo", cur.Kind)
+	}
 }
 
 type Command struct {
@@ -58,6 +92,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 	r.logDetections(dets)
 	r.notify(initial)
+	r.checkNet(ctx, true)
 
 	var stopSched func()
 	start := func() {
@@ -95,6 +130,7 @@ func (r *Runner) Run(ctx context.Context) error {
 				r.Log.Error("heartbeat", "err", err)
 			}
 			r.logDetections(dets)
+			r.checkNet(ctx, false)
 
 		case cmd := <-r.Control:
 			cmd.Done <- r.apply(ctx, cmd.Pause, start, &stopSched)
