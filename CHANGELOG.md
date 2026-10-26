@@ -4,6 +4,10 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); 
 
 ## [Não publicado]
 
+### Adicionado
+
+- Exportação de relatório (F8): HTML autocontido (sem script nem recurso externo, legível impresso, tema claro e escuro) e JSON com esquema `pinglume-export/1`, gerados do mesmo snapshot.
+
 ## [0.2.0] - 2026-10-25
 
 Fatias F5, F6 e F7: sondas DNS e HTTPS com backoff, relatos "travou agora" com análise `incident-v1`, e comparação guiada `compare-v1` com detecção do tipo de rede. O Nível 1 ainda não está completo: faltam exportação (F8), retenção (F9), modo demo (F10), medição de recursos (F11) e sonda UDP (F12). Os endpoints próprios continuam não hospedados; o agente mede o `probe-server` local.
