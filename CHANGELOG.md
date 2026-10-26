@@ -4,9 +4,55 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); 
 
 ## [Não publicado]
 
+## [0.3.0] - 2026-10-25
+
+Fatia F8: exportação de relatório em HTML e JSON, com prévia e redação de identificadores. Com ela, o fluxo principal da especificação está completo de ponta a ponta: medir, ver o histórico com lacunas, relatar, comparar uma mudança e exportar. O Nível 1 ainda não está completo: faltam retenção (F9), modo demo (F10), medição de recursos (F11) e sonda UDP (F12).
+
 ### Adicionado
 
-- Exportação de relatório (F8): HTML autocontido (sem script nem recurso externo, legível impresso, tema claro e escuro) e JSON com esquema `pinglume-export/1`, gerados do mesmo snapshot.
+**Relatório exportado**
+
+- HTML autocontido: sem script, sem fonte, imagem ou folha de estilo externa; CSS embutido; legível impresso; tema claro e escuro. Seções: aviso, cobertura (barra e tabela por estado), períodos sem medição, sondas (com o que cada uma mede), relatos com a análise completa, comparações com condições e resultado, método, versões das regras e tabela "O que foi removido deste relatório".
+- JSON com esquema versionado `pinglume-export/1`, gerado do mesmo snapshot do HTML: período, seções incluídas, dispositivo (só sistema e arquitetura), método, cobertura, sondas, relatos com `incident-v1`, comparações com `compare-v1` e redações aplicadas com contagem.
+- Snapshot imutável: cada exportação gerada fica gravada (migração 005, tabela `export_snapshots`) com SHA-256 do JSON; o HTML cita esse hash no rodapé; um ID repetido não sobrescreve um snapshot.
+- Prévia marcada como "PRÉVIA", gerada sem gravar nada.
+
+**Redação**
+
+- Nunca exportados: nome do computador, detalhes técnicos de erro das sondas, caminhos de arquivo, token.
+- Substituídos em todos os textos (análises, condições, perguntas, motivos e observações): nome do dono embutido no nome padrão do computador no macOS ("MacBook-de-Fulano", "Fulanos-MacBook-Pro") por `[nome]`; e-mails; endereços IPv4 (menos loopback, que é o testbed) e IPv6; endereços MAC; números com 8 dígitos ou mais (telefone, documento); nomes de interface (`en0` vira `interface-1`); alvos em rede privada.
+- Observações dos relatos ficam fora por padrão e só entram com pedido explícito, já redigidas.
+- O relatório declara cada redação aplicada, inclusive as que não encontraram nada.
+
+**API, CLI e dashboard**
+
+- API: `GET /api/v1/exports/preview` (HTML ou JSON, sem gravar), `POST /api/v1/exports`, `GET /api/v1/exports`, `GET /api/v1/exports/{id}/download?format=html|json` (anexo, com o hash em `X-Pinglume-SHA256`).
+- O HTML servido pelo agente tem CSP própria: `default-src 'none'`, só CSS embutido, sem script, sem rede; `frame-ancestors 'self'` para a prévia.
+- CLI: `pinglume export --window … --html … --json … [--notes] [--no-incidents] [--no-comparisons]`; confere o SHA-256 do JSON recebido antes de gravar e grava os arquivos com permissão 0600.
+- Dashboard: cartão **Exportar relatório** com o período exibido, opções do que incluir (observações desativadas quando relatos estão fora), prévia em quadro isolado (`sandbox`) e link para abrir em nova aba, geração, links de download com o hash e histórico de exportações. Aviso explícito de que um arquivo baixado não pode ser revogado.
+
+### Corrigido
+
+- O fim de um período que termina em outro dia aparecia só com o horário (uma lacuna de 25 h parecia de 1 h), no relatório e no dashboard ("Períodos sem medição" e tabela de dados). Agora mostra a data quando o dia muda.
+
+Corrigido ainda durante o desenvolvimento desta versão, antes de publicar:
+
+- O padrão de IPv6 da redação casaria com horários como "21:40:43" e os apagaria; agora exige 5 ou mais grupos ou a forma com "::".
+- O nome "Fulano" de uma pergunta de comparação passava pela redação, que só conhecia o nome completo do computador; o nome do dono passou a ser extraído do nome padrão do macOS.
+- A troca do nome era aplicada antes da de e-mails e quebrava o padrão ("[nome]@exemplo.com"); a ordem foi corrigida.
+- Telefones com DDD entre parênteses deixavam um "(" solto; o padrão passou a incluir o parêntese.
+
+### Segurança
+
+- As rotas de exportação seguem as proteções da API local (só `127.0.0.1`, token ou sessão, `Host`/`Origin`/`Sec-Fetch-Site`, sem CORS); verificado também o acesso como quadro: com sessão do próprio agente 200, sem sessão 401, vindo de outro site 403.
+- O conteúdo exportado é escapado: um `<script>` escrito numa observação aparece como texto.
+
+### Limites conhecidos
+
+- A redação reconhece padrões; nomes de outras pessoas escritos em texto livre não são detectáveis. Por isso observações ficam fora por padrão.
+- A prévia em quadro não pôde ser verificada no navegador embutido do app de desenvolvimento, que bloqueia quadros; a prévia em nova aba foi verificada.
+- O relatório traz tabelas e a barra de cobertura, mas não os gráficos da linha do tempo.
+- Continuam valendo os limites da 0.2.0: limiares iniciais não calibrados, comparação em rodada única, detecção de rede só no macOS.
 
 ## [0.2.0] - 2026-10-25
 
@@ -122,6 +168,7 @@ Primeira versão. Nível 1 ainda incompleto: só existe a sonda TCP, e ela mede 
 - Sem sondas DNS/HTTPS/UDP, incidentes, comparação guiada, exportação, retenção ou modo demo (fatias F5–F12).
 - Nenhuma medição de recursos (CPU, memória, tráfego) publicada ainda.
 
-[Não publicado]: https://github.com/pdrflp0/pinglume/compare/v0.2.0...develop
+[Não publicado]: https://github.com/pdrflp0/pinglume/compare/v0.3.0...develop
+[0.3.0]: https://github.com/pdrflp0/pinglume/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/pdrflp0/pinglume/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/pdrflp0/pinglume/releases/tag/v0.1.0
