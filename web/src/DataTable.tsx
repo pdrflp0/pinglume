@@ -1,5 +1,5 @@
 import type { Timeline as TimelineData } from "./api";
-import { clock, duration, failureLabel, latency, stateLabel } from "./format";
+import { clock, duration, failureLabel, latency, stateLabel, until } from "./format";
 import { coverageSegments } from "./Timeline";
 
 const fmt = new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
@@ -30,7 +30,7 @@ export function DataTable({ data }: { data: TimelineData }) {
             {segs.map((s) => (
               <tr key={`${s.start}-${s.state}`}>
                 <td className="num">{fmt.format(s.start)}</td>
-                <td className="num">{fmt.format(s.end)}</td>
+                <td className="num">{until(s.start, s.end)}</td>
                 <td className="num">{duration(s.end - s.start)}</td>
                 <td>{stateLabel[s.state]}</td>
                 <td className="muted">{s.reason || "—"}</td>

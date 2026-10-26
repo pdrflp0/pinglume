@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	version     = "0.2.0"
+	version     = "0.3.0"
 	defaultPort = 47821
 )
 
@@ -32,6 +32,8 @@ func main() {
 		err = cmdMark(os.Args[2:])
 	case "incidents":
 		err = cmdIncidents(os.Args[2:])
+	case "export":
+		err = cmdExport(os.Args[2:])
 	case "pause":
 		err = cmdPause(os.Args[2:], true)
 	case "resume":
@@ -57,6 +59,7 @@ comandos:
   status   resume medições e cobertura recentes (lê o banco; funciona com o agente parado)
   mark       registra "travou agora" (um relato, não uma medição)
   incidents  lista os relatos e a análise de cada um
+  export     gera relatório HTML/JSON redigido (--html, --json)
   pause    pausa novas medições do agente em execução
   resume   retoma as medições
   version  mostra a versão`)

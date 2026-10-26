@@ -60,3 +60,11 @@ test("latência formata sinal, unidade e vírgula", () => {
   expect(latency(-25000)).toBe("-25,0 ms");
   expect(latency(null)).toBe("—");
 });
+
+import { until } from "./format";
+
+test("fim de período mostra a data quando o dia muda", () => {
+  const a = new Date(2026, 9, 24, 22, 2, 16).getTime();
+  expect(until(a, a + 3600_000)).toBe("23:02:16");
+  expect(until(a, a + 25 * 3600_000)).toMatch(/^25\/10/);
+});
