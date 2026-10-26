@@ -72,6 +72,10 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/v1/experiments/{id}", s.require(anyAuth, s.handleGetExperiment))
 	mux.Handle("POST /api/v1/experiments/{id}/intervention", s.require(anyAuth, s.handleStartIntervention))
 	mux.Handle("POST /api/v1/experiments/{id}/cancel", s.require(anyAuth, s.handleCancelExperiment))
+	mux.Handle("GET /api/v1/exports/preview", s.require(anyAuth, s.handleExportPreview))
+	mux.Handle("GET /api/v1/exports", s.require(anyAuth, s.handleListExports))
+	mux.Handle("POST /api/v1/exports", s.require(anyAuth, s.handleCreateExport))
+	mux.Handle("GET /api/v1/exports/{id}/download", s.require(anyAuth, s.handleDownloadExport))
 	mux.Handle("POST /api/v1/pause", s.require(anyAuth, s.handlePause(true)))
 	mux.Handle("POST /api/v1/resume", s.require(anyAuth, s.handlePause(false)))
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {

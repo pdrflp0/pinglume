@@ -106,8 +106,15 @@ let experiments: unknown[] = [];
 const wifi = { interface: "en0", kind: "wifi", method: "teste" };
 
 /** Responde por rota, como o agente. */
+const exportMeta = {
+  id: "01EXPORTABCDEF", createdAt: "2026-10-20T21:15:00Z", from: "2026-10-20T21:00:00Z", to: "2026-10-20T21:15:00Z",
+  options: "{}", schemaVersion: "pinglume-export/1", agentVersion: "t", sha256: "ab".repeat(32),
+};
+
 function route(url: string, init?: RequestInit) {
   if (url === "/api/v1/network") return respond(wifi);
+  if (url === "/api/v1/exports" && init?.method === "POST") return respond(exportMeta, { status: 201 });
+  if (url === "/api/v1/exports") return respond([]);
   if (url === "/api/v1/experiments" && init?.method === "POST") return respond({}, { status: 201 });
   if (url.startsWith("/api/v1/experiments")) return respond(experiments);
   if (url === "/api/v1/incidents" && init?.method === "POST") {
@@ -360,4 +367,29 @@ test("resultado mostra intervalo, veredito por sonda e motivo de não comparáve
   expect(screen.getByText("cobertura de 40% na janela B (mínimo 80%)")).toBeTruthy();
   expect(screen.getAllByText("Não comparável").length).toBeGreaterThan(0);
   expect(screen.getByText(/mudança e horário se confundem/)).toBeTruthy();
+});
+
+test("exportar: opções enviadas, prévia isolada e links de download com hash", async () => {
+  fetchMock.mockImplementation(route);
+  render(<App />);
+  await screen.findByText("Exportar relatório");
+  const notes = screen.getByLabelText(/Observações escritas/) as HTMLInputElement;
+  expect(notes.checked).toBe(false);
+  fireEvent.click(screen.getByLabelText(/Relatos e/));
+  expect(notes.disabled).toBe(true);
+  fireEvent.click(screen.getByLabelText(/Relatos e/));
+  fireEvent.click(notes);
+
+  fireEvent.click(screen.getByText("Ver prévia"));
+  const frame = screen.getByTitle("Prévia do relatório exportado") as HTMLIFrameElement;
+  expect(frame.getAttribute("sandbox")).toBe("");
+  expect(frame.getAttribute("src")).toMatch(/^\/api\/v1\/exports\/preview\?.*notes=1/);
+
+  fireEvent.click(screen.getByText("Gerar arquivos"));
+  expect(await screen.findByText("Arquivos gerados.")).toBeTruthy();
+  const post = fetchMock.mock.calls.find(([u, i]) => u === "/api/v1/exports" && i?.method === "POST")!;
+  expect(JSON.parse(post[1].body)).toMatchObject({ includeIncidents: true, includeComparisons: true, includeNotes: true });
+  const html = screen.getByText("Baixar HTML") as HTMLAnchorElement;
+  expect(html.getAttribute("href")).toBe("/api/v1/exports/01EXPORTABCDEF/download?format=html");
+  expect(screen.getByText(/não pode ser revogado/)).toBeTruthy();
 });

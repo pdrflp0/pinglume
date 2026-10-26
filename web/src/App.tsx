@@ -10,8 +10,9 @@ import {
 } from "./api";
 import { ComparisonCard } from "./Comparison";
 import { DataTable } from "./DataTable";
+import { ExportCard } from "./Export";
 import { IncidentsCard, ReportDialog } from "./Incidents";
-import { clock, duration, failureLabel, kindMeasure, latency, percent, stateLabel, stateOrder } from "./format";
+import { clock, duration, failureLabel, kindMeasure, latency, percent, stateLabel, stateOrder, until } from "./format";
 import { pan, PRESETS, resolve, select, toQuery, zoom, type ViewRange } from "./range";
 import { rangeLabel } from "./scale";
 import { Timeline } from "./Timeline";
@@ -209,6 +210,8 @@ export function App() {
           <h2 id="probes-title">Sondas</h2>
           <ProbeTable probes={data.summary.probes} />
         </section>
+
+        <ExportCard from={shown.from} to={shown.to} />
       </main>
 
       <footer className="foot muted">
@@ -328,7 +331,7 @@ function GapList({ gaps }: { gaps: Status["summary"]["gaps"] }) {
         {gaps.map((g) => (
           <li key={`${g.start}-${g.state}`}>
             <span className="num">
-              {clock(g.start)} – {clock(g.end)}
+              {clock(g.start)} – {until(g.start, g.end)}
             </span>
             <span className={`tag tag-${g.state}`}>{stateLabel[g.state]}</span>
             <span className="muted">{g.reason}</span>

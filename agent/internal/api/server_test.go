@@ -364,3 +364,35 @@ func TestIncidentValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestExportRoutes(t *testing.T) {
+	e := newEnv(t)
+	w := e.do("GET", "/api/v1/exports/preview?window=1h", e.bearer())
+	if w.Code != 200 || !strings.Contains(w.Body.String(), "PRÉVIA") {
+		t.Fatalf("prévia: %d", w.Code)
+	}
+	if csp := w.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "default-src 'none'") || strings.Contains(csp, "script-src") {
+		t.Fatalf("CSP da prévia: %s", csp)
+	}
+	from := time.Now().Add(-time.Hour).UTC().Format(time.RFC3339)
+	to := time.Now().UTC().Format(time.RFC3339)
+	w = e.doBody("POST", "/api/v1/exports", `{"from":"`+from+`","to":"`+to+`","includeIncidents":true}`, e.bearer())
+	if w.Code != http.StatusCreated {
+		t.Fatalf("criar: %d %s", w.Code, w.Body)
+	}
+	var m struct{ ID, SHA256 string }
+	json.Unmarshal(w.Body.Bytes(), &m)
+	w = e.do("GET", "/api/v1/exports/"+m.ID+"/download?format=json", e.bearer())
+	if w.Code != 200 || !strings.HasPrefix(w.Header().Get("Content-Disposition"), "attachment;") || w.Header().Get("X-Pinglume-SHA256") != m.SHA256 {
+		t.Fatalf("download: %d %v", w.Code, w.Header())
+	}
+	if w := e.do("GET", "/api/v1/exports/"+m.ID+"/download?format=pdf", e.bearer()); w.Code != http.StatusBadRequest {
+		t.Fatalf("formato inválido: %d", w.Code)
+	}
+	if w := e.do("GET", "/api/v1/exports/"+m.ID+"/download?format=html"); w.Code != http.StatusUnauthorized {
+		t.Fatalf("download sem credencial: %d", w.Code)
+	}
+	if w := e.doBody("POST", "/api/v1/exports", `{"from":"`+to+`","to":"`+to+`"}`, e.bearer()); w.Code != http.StatusBadRequest {
+		t.Fatalf("período vazio: %d", w.Code)
+	}
+}

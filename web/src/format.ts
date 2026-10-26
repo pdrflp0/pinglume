@@ -98,3 +98,18 @@ export const compareVerdictLabel: Record<string, string> = {
   nao_comparavel: "Não comparável",
   dados_insuficientes: "Dados insuficientes",
 };
+
+const dayTimeFmt = new Intl.DateTimeFormat("pt-BR", {
+  day: "2-digit",
+  month: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+});
+
+/** Fim de um período: só o horário no mesmo dia; com a data quando o dia muda. */
+export function until(start: string | number, end: string | number): string {
+  const a = new Date(start);
+  const b = new Date(end);
+  return a.toDateString() === b.toDateString() ? timeFmt.format(b) : dayTimeFmt.format(b);
+}

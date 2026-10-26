@@ -213,6 +213,25 @@ export interface Experiment {
   result: CompareResult | null;
 }
 
+export interface ExportMeta {
+  id: string;
+  createdAt: string;
+  from: string;
+  to: string;
+  options: string;
+  schemaVersion: string;
+  agentVersion: string;
+  sha256: string;
+}
+
+export interface ExportOptions {
+  from: string;
+  to: string;
+  includeIncidents: boolean;
+  includeComparisons: boolean;
+  includeNotes: boolean;
+}
+
 /** Intervalo pedido à API: relativo a agora ou absoluto. */
 export type RangeQuery = { window: string } | { from: Date; to: Date };
 
@@ -282,6 +301,8 @@ export const api = {
   startIntervention: (id: string, condition: string) =>
     call<Experiment>("POST", `/api/v1/experiments/${encodeURIComponent(id)}/intervention`, { condition }),
   cancelExperiment: (id: string) => call<Experiment>("POST", `/api/v1/experiments/${encodeURIComponent(id)}/cancel`),
+  exports: () => call<ExportMeta[]>("GET", "/api/v1/exports"),
+  createExport: (o: ExportOptions) => call<ExportMeta>("POST", "/api/v1/exports", o),
   pause: () => call<{ state: CoverageState }>("POST", "/api/v1/pause"),
   resume: () => call<{ state: CoverageState }>("POST", "/api/v1/resume"),
 };

@@ -16,7 +16,8 @@ Ferramenta local para investigar falhas intermitentes de internet durante chamad
 | F5 sondas DNS e HTTPS, backoff e injeção de falhas no probe-server | feito e testado |
 | F6 relatos ("travou agora") e análise `incident-v1` | feito e testado |
 | F7 comparação guiada `compare-v1` e detecção do tipo de rede | feito e testado |
-| F8 em diante | ver backlog no documento de desenho |
+| F8 exportação HTML/JSON com prévia e redação | feito e testado |
+| F9 em diante | ver backlog no documento de desenho |
 
 ## Rodar localmente
 
@@ -80,6 +81,20 @@ A regra `compare-v1`:
 - melhora numa medida e piora na outra vira "inconclusivo";
 - aponta fatores de confusão: janelas distantes no tempo, interface que mudou durante a janela, VPN, e interface detectada igual nas duas janelas apesar da mudança declarada.
 
+### Exportar um relatório
+
+No dashboard, **Exportar relatório** mostra a prévia do arquivo e gera um HTML legível e um JSON (esquema `pinglume-export/1`) com o período exibido. Pela CLI:
+
+```bash
+agent/bin/pinglume export --data-dir .dev-data --window 24h --html relatorio.html --json relatorio.json
+```
+
+- Nunca saem: nome do computador, detalhes técnicos de erro, caminhos de arquivo, token.
+- Substituídos em todos os textos: nome do dono embutido no nome do computador (padrão do macOS), e-mails, endereços IP (menos o loopback do testbed), endereços MAC, números longos e nomes de interface.
+- Observações dos relatos só entram se você marcar (`--notes`), e passam pelas mesmas substituições.
+- O relatório traz uma tabela do que foi removido, as versões das regras e o método; cada frase de análise vem com as entradas que a sustentam.
+- Cada exportação gerada é um snapshot imutável com SHA-256 do JSON; o HTML cita esse hash. Um arquivo baixado não pode ser revogado.
+
 Pausar e retomar (a pausa persiste se o agente reiniciar):
 
 ```bash
@@ -129,6 +144,8 @@ Branches, versionamento (SemVer) e convenção de commits: [docs/fluxo-git.md](d
 - A comparação tem uma rodada A→B: mudança e horário se confundem, e o resultado sempre diz isso. Blocos repetidos (A-B-A) ficam para o Nível 2.
 - A detecção de rede só existe no macOS; em outras plataformas a condição é apenas a declarada.
 - Ainda não há comando de CLI para a comparação; ela é feita pelo dashboard (ou direto pela API).
+- A redação reconhece padrões (e-mail, IP, MAC, telefone, nome do computador). Nomes de outras pessoas escritos em texto livre não são detectáveis; por isso observações ficam fora por padrão.
+- A prévia em quadro (iframe) não pôde ser verificada no navegador embutido do app, que bloqueia quadros; o link "Abrir prévia em nova aba" foi verificado.
 - Alvos de desenvolvimento precisam ser loopback ou rede privada; o agente recusa outros.
 - A detecção de suspensão compara relógio civil e monotônico. Ela não distingue sono de relógio adiantado manualmente (o motivo registrado diz isso) e ainda não foi validada com o Mac dormindo de verdade.
 - Depois de um crash, a lacuna começa no último heartbeat (a cada 5 s): o instante exato da queda tem até 5 s de incerteza.
