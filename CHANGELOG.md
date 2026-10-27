@@ -4,6 +4,53 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); 
 
 ## [Não publicado]
 
+## [0.4.0] - 2026-10-27
+
+Fatia F9: retenção, compactação por minuto e limite de disco. Também remove todos os comentários do código, mantendo só as diretivas exigidas pelas ferramentas. O Nível 1 ainda não está completo: faltam modo demo (F10), medição de recursos (F11) e sonda UDP (F12).
+
+### Adicionado
+
+**Retenção e compactação**
+
+- Medições brutas mais antigas que a retenção (padrão 7 dias, `--retention`, mínimo 1 h) são compactadas em agregados por minuto e apagadas. Cada agregado guarda execuções, execuções ok, falhas por status, mediana, p95, mínimo e máximo (migração 006, tabela `observation_minutes`). Minutos são compactados inteiros e em lotes, numa transação por lote.
+- Agregados mais antigos que a retenção de agregados (padrão 90 dias, `--aggregate-retention`) são descartados junto com os intervalos de cobertura do mesmo período.
+- Antes de compactar, as interpretações de relatos (`incident-v1`) e os resultados de comparações (`compare-v1`) que dependem dos dados brutos afetados são calculados e gravados, para não mudarem depois.
+
+**Limite de disco**
+
+- Limite de espaço usado pelo banco (padrão 250 MB, `--disk-limit-mb`, 0 desativa). Acima dele: compacta antes do prazo (metade mais antiga dos brutos de cada vez) e, se ainda preciso, descarta a metade mais antiga dos agregados. Se não houver mais nada a liberar, grava o evento `disk_limit` em vez de falhar em silêncio.
+- Disco cheio ao gravar (erro `SQLITE_FULL` ou falta de espaço): as medições são suspensas, o estado público vira "sonda indisponível" com o motivo "disco cheio", o agente testa a cada heartbeat se o espaço voltou e retoma sozinho, registrando o período sem medição (mesmo quando nem o registro pôde ser gravado no momento da falha) e o evento `disk_full_recovered`.
+
+**Registro e visibilidade**
+
+- Eventos `retention_compaction` (linhas, minutos, período, motivo), `history_dropped` (minutos, período, motivo), `disk_limit` e `disk_full_recovered`.
+- Rota `GET /api/v1/storage`: uso do banco, limite, retenções, medição bruta e agregado mais antigos e manutenções recentes.
+- Comando `pinglume storage`.
+- Rodapé do dashboard: uso do banco, limite e retenções.
+
+**Leitura de períodos compactados**
+
+- Resumo (CLI, dashboard, exportação) e linha do tempo somam os agregados por minuto aos dados brutos: contagens e cobertura continuam exatas. Os percentis passam a ser estimados por quantil ponderado das medianas e dos p95 de cada minuto e vêm marcados como aproximados (`approximate` no resumo, `approx` nos trechos da linha do tempo, "aprox." no dashboard, "≈" na CLI, aviso no painel de leitura).
+
+### Alterado
+
+- Todos os comentários foram removidos do código Go, TypeScript/TSX, CSS, SQL, Makefile e do workflow de CI. Ficam só as diretivas exigidas: `//go:build`, `//go:embed` e `/// <reference types="vite/client" />`. A remoção em Go foi feita com `go/ast`; nenhum comportamento mudou, e um banco criado com as migrações comentadas abre normalmente (migrações são controladas pelo número do arquivo).
+- Durações de dias inteiros a partir de 2 dias aparecem como "7 dias" no dashboard e na CLI.
+
+### Corrigido
+
+Corrigido durante o desenvolvimento desta versão, antes de publicar:
+
+- Ao detectar disco cheio, o runner não publicava o novo estado: a API e o dashboard continuariam mostrando "Medindo" com as medições suspensas. Achado pelo detector de corrida do Go, numa leitura de estado feita pelo próprio teste.
+- `VACUUM` rodaria depois de qualquer compactação, reescrevendo o banco inteiro a cada 10 min; agora só roda com mais de 25% de espaço livre no arquivo ou acima do limite.
+
+### Limites conhecidos
+
+- O p95 de períodos compactados tende a sair acima do real (no ensaio, 2,92 ms brutos contra 7,15 ms estimados para o DNS), por isso é sinalizado como aproximado.
+- O limite de disco foi verificado só em testes automatizados: no ensaio real o banco tinha 0,3 MB e o menor limite configurável é 1 MB.
+- `VACUUM` bloqueia gravações enquanto roda.
+- Seguem valendo os limites anteriores (limiares não calibrados, comparação em rodada única, detecção de rede só no macOS).
+
 ## [0.3.0] - 2026-10-25
 
 Fatia F8: exportação de relatório em HTML e JSON, com prévia e redação de identificadores. Com ela, o fluxo principal da especificação está completo de ponta a ponta: medir, ver o histórico com lacunas, relatar, comparar uma mudança e exportar. O Nível 1 ainda não está completo: faltam retenção (F9), modo demo (F10), medição de recursos (F11) e sonda UDP (F12).
@@ -168,7 +215,8 @@ Primeira versão. Nível 1 ainda incompleto: só existe a sonda TCP, e ela mede 
 - Sem sondas DNS/HTTPS/UDP, incidentes, comparação guiada, exportação, retenção ou modo demo (fatias F5–F12).
 - Nenhuma medição de recursos (CPU, memória, tráfego) publicada ainda.
 
-[Não publicado]: https://github.com/pdrflp0/pinglume/compare/v0.3.0...develop
+[Não publicado]: https://github.com/pdrflp0/pinglume/compare/v0.4.0...develop
+[0.4.0]: https://github.com/pdrflp0/pinglume/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/pdrflp0/pinglume/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/pdrflp0/pinglume/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/pdrflp0/pinglume/releases/tag/v0.1.0
