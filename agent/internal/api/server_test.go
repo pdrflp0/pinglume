@@ -394,3 +394,18 @@ func TestExportRoutes(t *testing.T) {
 		t.Fatalf("período vazio: %d", w.Code)
 	}
 }
+
+func TestStorageRoute(t *testing.T) {
+	e := newEnv(t)
+	w := e.do("GET", "/api/v1/storage", e.bearer())
+	var info struct {
+		Usage             struct{ UsedBytes int64 }
+		RecentMaintenance []any
+	}
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &info) != nil || info.Usage.UsedBytes <= 0 || info.RecentMaintenance == nil {
+		t.Fatalf("armazenamento: %d %s", w.Code, w.Body)
+	}
+	if w := e.do("GET", "/api/v1/storage"); w.Code != http.StatusUnauthorized {
+		t.Fatalf("sem credencial: %d", w.Code)
+	}
+}

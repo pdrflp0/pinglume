@@ -36,6 +36,7 @@ export function duration(ms: number): string {
   const m = Math.floor(s / 60);
   if (m < 60) return s % 60 ? `${m} min ${s % 60} s` : `${m} min`;
   const h = Math.floor(m / 60);
+  if (h >= 48 && h % 24 === 0 && m % 60 === 0) return `${h / 24} dias`;
   return m % 60 ? `${h} h ${m % 60} min` : `${h} h`;
 }
 
@@ -108,4 +109,8 @@ export function until(start: string | number, end: string | number): string {
   const a = new Date(start);
   const b = new Date(end);
   return a.toDateString() === b.toDateString() ? timeFmt.format(b) : dayTimeFmt.format(b);
+}
+
+export function megabytes(b: number): string {
+  return `${(b / 1048576).toFixed(1).replace(".", ",")} MB`;
 }

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"pinglume/agent/internal/backoff"
+	"pinglume/agent/internal/stats"
 	"pinglume/agent/internal/store"
 )
 
@@ -30,6 +31,7 @@ type Probe struct {
 	P95US           *int64         `json:"p95Us"`
 	Coverage        *float64       `json:"coverage"`
 	BackoffMS       int64          `json:"backoffMs"`
+	Approximate     bool           `json:"approximate"`
 	LastStarted     time.Time      `json:"lastStarted"`
 }
 
@@ -77,6 +79,49 @@ func Build(ctx context.Context, st *store.Store, from, to time.Time, opt Options
 	if err != nil {
 		return s, err
 	}
+	mins, err := st.MinutesBetween(ctx, from, to)
+	if err != nil {
+		return s, err
+	}
+	type minAcc struct {
+		meta     store.MinuteRow
+		n, ok    int
+		fails    map[string]int
+		p50, p95 []stats.Weighted
+	}
+	byMin := map[string]*minAcc{}
+	var minOrder []string
+	for _, m := range mins {
+		a := byMin[m.ProbeDefID]
+		if a == nil {
+			a = &minAcc{meta: m, fails: map[string]int{}}
+			byMin[m.ProbeDefID] = a
+			minOrder = append(minOrder, m.ProbeDefID)
+		}
+		a.n += m.N
+		a.ok += m.OK
+		for k, v := range m.Failures {
+			a.fails[k] += v
+		}
+		if m.P50US != nil {
+			a.p50 = append(a.p50, stats.Weighted{Value: *m.P50US, Weight: m.OK})
+		}
+		if m.P95US != nil {
+			a.p95 = append(a.p95, stats.Weighted{Value: *m.P95US, Weight: m.OK})
+		}
+	}
+	seen := map[string]bool{}
+	for _, ps := range sums {
+		seen[ps.ProbeDefID] = true
+	}
+	for _, id := range minOrder {
+		if !seen[id] {
+			m := byMin[id].meta
+			sums = append(sums, store.ProbeSummary{ProbeDefID: id, Kind: m.Kind, Target: m.Target, EndpointLabel: m.EndpointLabel,
+				ProtocolVersion: m.ProtocolVersion, Interval: m.Interval, ByStatus: map[string]int{}})
+		}
+	}
+
 	for _, ps := range sums {
 		p := Probe{
 			ProbeDefID: ps.ProbeDefID, BackoffMS: backoff.Total(spans[ps.ProbeDefID]).Milliseconds(),
@@ -90,9 +135,27 @@ func Build(ctx context.Context, st *store.Store, from, to time.Time, opt Options
 				p.Failures[k] = v
 			}
 		}
+		cancelled := ps.ByStatus["cancelled"]
+		if a := byMin[ps.ProbeDefID]; a != nil {
+			p.Approximate = true
+			p.Total += a.n
+			p.OK += a.ok
+			for k, v := range a.fails {
+				p.Failures[k] += v
+			}
+			p50, p95 := append([]stats.Weighted(nil), a.p50...), append([]stats.Weighted(nil), a.p95...)
+			for _, d := range ps.OKDurations {
+				p50 = append(p50, stats.Weighted{Value: d.Microseconds(), Weight: 1})
+				p95 = append(p95, stats.Weighted{Value: d.Microseconds(), Weight: 1})
+			}
+			p.P50US, p.P95US = stats.Quantile(p50, 0.5), stats.Quantile(p95, 0.95)
+			if p.LastStarted.IsZero() {
+				p.LastStarted = a.meta.Minute
+			}
+		}
 		if ps.Interval > 0 && measuring >= ps.Interval {
 			expected := float64(measuring) / float64(ps.Interval)
-			c := min(1, float64(ps.Total-ps.ByStatus["cancelled"])/expected)
+			c := min(1, float64(p.Total-cancelled)/expected)
 			p.Coverage = &c
 		}
 		s.Probes = append(s.Probes, p)

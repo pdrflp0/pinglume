@@ -28,6 +28,7 @@ type Scheduler struct {
 	Log          *slog.Logger
 	BackoffAfter int
 	BackoffMax   int
+	OnWriteError func(error)
 }
 
 type BackoffDetail struct {
@@ -122,6 +123,9 @@ func (s *Scheduler) loop(ctx context.Context, j Job, seq int64, sem chan struct{
 		cancel()
 		if err != nil {
 			s.Log.Error("falha ao gravar observação", "probe", j.Def.ID, "seq", seq, "err", err)
+			if s.OnWriteError != nil {
+				s.OnWriteError(err)
+			}
 		} else {
 			seq++
 		}

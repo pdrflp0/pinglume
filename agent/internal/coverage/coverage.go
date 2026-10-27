@@ -10,10 +10,11 @@ import (
 )
 
 const (
-	Measuring = "measuring"
-	Paused    = "paused"
-	Suspended = "suspended"
-	AgentDown = "agent_down"
+	Measuring        = "measuring"
+	Paused           = "paused"
+	Suspended        = "suspended"
+	AgentDown        = "agent_down"
+	ProbeUnavailable = "probe_unavailable"
 )
 
 type Tracker struct {
@@ -136,4 +137,15 @@ func (t *Tracker) SetState(ctx context.Context, state, reason string) error {
 func (t *Tracker) Stop(ctx context.Context) error {
 	_, err := t.Store.Transition(ctx, t.DeviceID, t.Clock.Now(), nil, nil)
 	return err
+}
+
+func (t *Tracker) Recover(ctx context.Context, from time.Time, reason string) error {
+	now := t.Clock.Now()
+	iv := store.Interval{Start: from, End: now, State: ProbeUnavailable, Reason: reason, DetectedBy: "write_error"}
+	if _, err := t.Store.Transition(ctx, t.DeviceID, from, []store.Interval{iv},
+		&store.Interval{Start: now, State: Measuring, DetectedBy: "agent"}); err != nil {
+		return err
+	}
+	t.state, t.prevWall, t.prevMono = Measuring, now, t.Clock.Mono()
+	return nil
 }
