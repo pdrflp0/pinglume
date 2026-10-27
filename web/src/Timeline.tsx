@@ -453,6 +453,7 @@ function Readout({
                 <span className="muted">nenhuma execução começou neste trecho</span>
               )}
               {inBackoff && <span className="muted"> · em backoff</span>}
+              {b?.approx && <span className="muted"> · dados compactados, percentis aproximados</span>}
             </li>
           );
         })}

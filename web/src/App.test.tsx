@@ -34,6 +34,7 @@ const status: Status = {
         coverage: 0.97,
         probeDefId: "p1",
         backoffMs: 0,
+        approximate: true,
         lastStarted: "2026-10-20T21:14:55Z",
       },
     ],
@@ -114,6 +115,15 @@ function route(url: string, init?: RequestInit) {
   if (url === "/api/v1/network") return respond(wifi);
   if (url === "/api/v1/exports" && init?.method === "POST") return respond(exportMeta, { status: 201 });
   if (url === "/api/v1/exports") return respond([]);
+  if (url === "/api/v1/storage")
+    return respond({
+      usage: { usedBytes: 12.5 * 1048576, fileBytes: 13 * 1048576 },
+      limitBytes: 250 * 1048576,
+      rawRetentionMs: 7 * 24 * 3600_000,
+      aggregateRetentionMs: 90 * 24 * 3600_000,
+      oldestRaw: null,
+      oldestAggregate: null,
+    });
   if (url === "/api/v1/experiments" && init?.method === "POST") return respond({}, { status: 201 });
   if (url.startsWith("/api/v1/experiments")) return respond(experiments);
   if (url === "/api/v1/incidents" && init?.method === "POST") {
@@ -391,4 +401,13 @@ test("exportar: opções enviadas, prévia isolada e links de download com hash"
   const html = screen.getByText("Baixar HTML") as HTMLAnchorElement;
   expect(html.getAttribute("href")).toBe("/api/v1/exports/01EXPORTABCDEF/download?format=html");
   expect(screen.getByText(/não pode ser revogado/)).toBeTruthy();
+});
+
+test("rodapé mostra uso do banco e retenção; percentis aproximados são sinalizados", async () => {
+  fetchMock.mockImplementation(route);
+  render(<App />);
+  expect(await screen.findByText(/banco 12,5 MB/)).toBeTruthy();
+  expect(screen.getByText(/de 250,0 MB/)).toBeTruthy();
+  expect(screen.getByText(/guardadas por 7 dias, agregados por 90 dias/)).toBeTruthy();
+  expect(screen.getAllByText("aprox.").length).toBe(2);
 });

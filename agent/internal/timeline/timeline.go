@@ -6,17 +6,19 @@ import (
 	"time"
 
 	"pinglume/agent/internal/backoff"
+	"pinglume/agent/internal/stats"
 	"pinglume/agent/internal/store"
 )
 
 type Bucket struct {
-	T     int64          `json:"t"`
-	N     int            `json:"n"`
-	OK    int            `json:"ok"`
-	Fail  map[string]int `json:"fail,omitempty"`
-	P50US *int64         `json:"p50Us"`
-	P95US *int64         `json:"p95Us"`
-	MaxUS *int64         `json:"maxUs"`
+	T      int64          `json:"t"`
+	N      int            `json:"n"`
+	OK     int            `json:"ok"`
+	Fail   map[string]int `json:"fail,omitempty"`
+	P50US  *int64         `json:"p50Us"`
+	P95US  *int64         `json:"p95Us"`
+	MaxUS  *int64         `json:"maxUs"`
+	Approx bool           `json:"approx,omitempty"`
 }
 
 type Series struct {
@@ -66,8 +68,10 @@ func Build(ctx context.Context, st *store.Store, from, to time.Time, n int, live
 		return tl, err
 	}
 	type acc struct {
-		b   Bucket
-		oks []time.Duration
+		b        Bucket
+		oks      []time.Duration
+		p50, p95 []stats.Weighted
+		max      *int64
 	}
 	bySeries := map[string]*Series{}
 	accs := map[string]map[int64]*acc{}
@@ -98,6 +102,48 @@ func Build(ctx context.Context, st *store.Store, from, to time.Time, n int, live
 			a.b.Fail[r.Status]++
 		}
 	}
+	mins, err := st.MinutesBetween(ctx, from, to)
+	if err != nil {
+		return tl, err
+	}
+	for _, m := range mins {
+		s, ok := bySeries[m.ProbeDefID]
+		if !ok {
+			s = &Series{ProbeDefID: m.ProbeDefID, Endpoint: m.EndpointLabel, Kind: m.Kind,
+				ProtocolVersion: m.ProtocolVersion, Target: m.Target, IntervalMS: m.Interval.Milliseconds()}
+			bySeries[m.ProbeDefID] = s
+			accs[m.ProbeDefID] = map[int64]*acc{}
+			order = append(order, m.ProbeDefID)
+		}
+		if m.Minute.Before(from) {
+			continue
+		}
+		idx := int64(m.Minute.Sub(from) / bucket)
+		a := accs[m.ProbeDefID][idx]
+		if a == nil {
+			a = &acc{b: Bucket{T: from.Add(time.Duration(idx) * bucket).UnixMilli()}}
+			accs[m.ProbeDefID][idx] = a
+		}
+		a.b.Approx = true
+		a.b.N += m.N
+		a.b.OK += m.OK
+		for k, v := range m.Failures {
+			if a.b.Fail == nil {
+				a.b.Fail = map[string]int{}
+			}
+			a.b.Fail[k] += v
+		}
+		if m.P50US != nil {
+			a.p50 = append(a.p50, stats.Weighted{Value: *m.P50US, Weight: m.OK})
+		}
+		if m.P95US != nil {
+			a.p95 = append(a.p95, stats.Weighted{Value: *m.P95US, Weight: m.OK})
+		}
+		if m.MaxUS != nil && (a.max == nil || *m.MaxUS > *a.max) {
+			v := *m.MaxUS
+			a.max = &v
+		}
+	}
 	spans, err := backoff.Spans(ctx, st, from, to)
 	if err != nil {
 		return tl, err
@@ -115,7 +161,17 @@ func Build(ctx context.Context, st *store.Store, from, to time.Time, n int, live
 		sort.Slice(idxs, func(i, j int) bool { return idxs[i] < idxs[j] })
 		for _, i := range idxs {
 			a := accs[id][i]
-			if len(a.oks) > 0 {
+			if a.b.Approx {
+				for _, d := range a.oks {
+					us := d.Microseconds()
+					a.p50 = append(a.p50, stats.Weighted{Value: us, Weight: 1})
+					a.p95 = append(a.p95, stats.Weighted{Value: us, Weight: 1})
+					if a.max == nil || us > *a.max {
+						a.max = &us
+					}
+				}
+				a.b.P50US, a.b.P95US, a.b.MaxUS = stats.Quantile(a.p50, 0.5), stats.Quantile(a.p95, 0.95), a.max
+			} else if len(a.oks) > 0 {
 				sort.Slice(a.oks, func(i, j int) bool { return a.oks[i] < a.oks[j] })
 				a.b.P50US = rank(a.oks, 0.50)
 				a.b.P95US = rank(a.oks, 0.95)

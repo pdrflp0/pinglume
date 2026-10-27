@@ -31,6 +31,7 @@ export interface Probe {
   coverage: number | null;
 
   backoffMs: number;
+  approximate: boolean;
   lastStarted: string;
 }
 
@@ -55,6 +56,7 @@ export interface Bucket {
   p50Us: number | null;
   p95Us: number | null;
   maxUs: number | null;
+  approx?: boolean;
 }
 
 export interface Series {
@@ -212,6 +214,15 @@ export interface Experiment {
   result: CompareResult | null;
 }
 
+export interface StorageInfo {
+  usage: { usedBytes: number; fileBytes: number };
+  limitBytes: number;
+  rawRetentionMs: number;
+  aggregateRetentionMs: number;
+  oldestRaw: string | null;
+  oldestAggregate: string | null;
+}
+
 export interface ExportMeta {
   id: string;
   createdAt: string;
@@ -296,6 +307,7 @@ export const api = {
   startIntervention: (id: string, condition: string) =>
     call<Experiment>("POST", `/api/v1/experiments/${encodeURIComponent(id)}/intervention`, { condition }),
   cancelExperiment: (id: string) => call<Experiment>("POST", `/api/v1/experiments/${encodeURIComponent(id)}/cancel`),
+  storage: () => call<StorageInfo>("GET", "/api/v1/storage"),
   exports: () => call<ExportMeta[]>("GET", "/api/v1/exports"),
   createExport: (o: ExportOptions) => call<ExportMeta>("POST", "/api/v1/exports", o),
   pause: () => call<{ state: CoverageState }>("POST", "/api/v1/pause"),

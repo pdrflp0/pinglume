@@ -62,12 +62,14 @@ func cmdStatus(args []string) error {
 		}
 		fmt.Fprintf(w, "%s\t%s v%d\t%s\t%d\t%s\t%s\t%d\t%s\t%s\t%s\t%s\n",
 			p.Endpoint, p.Kind, p.ProtocolVersion, p.Target, p.Total, ratio(p.Coverage), bo, p.OK,
-			failures(p.Failures), micros(p.P50US), micros(p.P95US), p.LastStarted.Local().Format("15:04:05"))
+			failures(p.Failures), approx(micros(p.P50US), p.Approximate), approx(micros(p.P95US), p.Approximate),
+			p.LastStarted.Local().Format("15:04:05"))
 	}
 	w.Flush()
 	fmt.Println("\nCOBERTURA: execuções concluídas ÷ esperadas durante o tempo medindo.")
 	fmt.Println("BACKOFF: tempo com intervalo ampliado após falhas seguidas (reduz a cobertura de propósito).")
 	fmt.Println("P50/P95, só execuções ok — tcp: handshake; dns: resolução de nome único; https: requisição completa com conexão nova.")
+	fmt.Println("≈: percentis aproximados, o período inclui dados antigos compactados por minuto (contagens exatas).")
 	fmt.Println("Falhas são rotuladas pelo protocolo da sonda; não são perda de pacotes IP.")
 	return nil
 }
@@ -114,4 +116,11 @@ func failures(by map[string]int) string {
 	}
 	sort.Strings(parts)
 	return strings.Join(parts, ",")
+}
+
+func approx(v string, a bool) string {
+	if a && v != "-" {
+		return "≈" + v
+	}
+	return v
 }

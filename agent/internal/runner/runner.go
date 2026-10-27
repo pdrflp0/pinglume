@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"pinglume/agent/internal/coverage"
 	"pinglume/agent/internal/netctx"
+	"pinglume/agent/internal/retention"
 	"pinglume/agent/internal/sched"
 	"pinglume/agent/internal/store"
 )
@@ -16,16 +18,18 @@ import (
 const pausedKey = "paused"
 
 type Runner struct {
-	Store     *store.Store
-	Tracker   *coverage.Tracker
-	Scheduler *sched.Scheduler
-	Jobs      []sched.Job
-	Log       *slog.Logger
-	Control   <-chan Command
-	OnState   func(state string)
-	Net       netctx.Detector
-	state     atomic.Value
-	net       atomic.Value
+	Store         *store.Store
+	Tracker       *coverage.Tracker
+	Scheduler     *sched.Scheduler
+	Jobs          []sched.Job
+	Log           *slog.Logger
+	Control       <-chan Command
+	OnState       func(state string)
+	Net           netctx.Detector
+	Maintainer    *retention.Maintainer
+	MaintainEvery time.Duration
+	state         atomic.Value
+	net           atomic.Value
 }
 
 func (r *Runner) NetContext() netctx.Context {
@@ -99,10 +103,48 @@ func (r *Runner) Run(ctx context.Context) error {
 		r.Log.Info("agente iniciou pausado; use `pinglume resume` para medir")
 	}
 
+	writeErr := make(chan error, 1)
+	r.Scheduler.OnWriteError = func(err error) {
+		if store.IsDiskFull(err) {
+			select {
+			case writeErr <- err:
+			default:
+			}
+		}
+	}
+	var maint sync.WaitGroup
+	if r.Maintainer != nil {
+		maint.Add(1)
+		go func() {
+			defer maint.Done()
+			r.maintain(ctx)
+		}()
+	}
+	defer maint.Wait()
+
+	var diskFull, pendingGap bool
+	var fullAt time.Time
+	const fullReason = "disco cheio: medições suspensas até haver espaço"
+
 	ticker := time.NewTicker(r.Tracker.Heartbeat)
 	defer ticker.Stop()
 	for {
 		select {
+		case <-writeErr:
+			if diskFull {
+				continue
+			}
+			diskFull, fullAt = true, r.Tracker.Clock.Now()
+			if stopSched != nil {
+				stopSched()
+			}
+			if err := r.Tracker.SetState(ctx, coverage.ProbeUnavailable, fullReason); err != nil {
+				pendingGap = true
+			}
+			r.notify(coverage.ProbeUnavailable)
+			r.Log.Error("disco cheio: medições suspensas")
+			continue
+
 		case <-ctx.Done():
 			if stopSched != nil {
 				stopSched()
@@ -118,6 +160,21 @@ func (r *Runner) Run(ctx context.Context) error {
 			}
 			r.logDetections(dets)
 			r.checkNet(ctx, false)
+			if diskFull && r.Store.SetState(ctx, "disk_check", r.Tracker.Clock.Now().Format(time.RFC3339)) == nil {
+				var err error
+				if pendingGap {
+					err = r.Tracker.Recover(ctx, fullAt, fullReason)
+				} else {
+					err = r.Tracker.SetState(ctx, coverage.Measuring, "espaço em disco disponível de novo")
+				}
+				if err == nil {
+					diskFull, pendingGap = false, false
+					r.Store.InsertSystemEvent(ctx, r.Tracker.Clock.Now(), "disk_full_recovered", "")
+					r.notify(coverage.Measuring)
+					start()
+					r.Log.Info("espaço em disco disponível; medições retomadas")
+				}
+			}
 
 		case cmd := <-r.Control:
 			cmd.Done <- r.apply(ctx, cmd.Pause, start, &stopSched)
@@ -180,5 +237,27 @@ func (r *Runner) logDetections(dets []coverage.Detection) {
 			"de", d.Interval.Start.Local().Format(time.TimeOnly),
 			"até", d.Interval.End.Local().Format(time.TimeOnly),
 			"motivo", d.Interval.Reason)
+	}
+}
+
+func (r *Runner) maintain(ctx context.Context) {
+	every := r.MaintainEvery
+	if every <= 0 {
+		every = 10 * time.Minute
+	}
+	for {
+		rep, err := r.Maintainer.Run(ctx)
+		switch {
+		case err != nil && ctx.Err() == nil:
+			r.Log.Error("manutenção do armazenamento", "err", err)
+		case len(rep.Compacted) > 0 || rep.DroppedRows > 0 || rep.LimitReached:
+			r.Log.Info("armazenamento mantido", "compactações", len(rep.Compacted), "minutos_descartados", rep.DroppedRows,
+				"uso_mb", rep.UsageAfter.UsedBytes>>20, "limite_atingido", rep.LimitReached)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(every):
+		}
 	}
 }

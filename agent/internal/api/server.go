@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"pinglume/agent/internal/netctx"
+	"pinglume/agent/internal/retention"
+	"pinglume/agent/internal/storage"
 	"pinglume/agent/internal/store"
 	"pinglume/agent/internal/summary"
 	"pinglume/agent/internal/timeline"
@@ -27,15 +29,16 @@ type Controller interface {
 }
 
 type Server struct {
-	Store    *store.Store
-	Ctl      Controller
-	Token    string
-	Port     int
-	Version  string
-	Static   fs.FS
-	DeviceID string
-	Now      func() time.Time
-	sess     *sessions
+	Store     *store.Store
+	Ctl       Controller
+	Token     string
+	Port      int
+	Version   string
+	Static    fs.FS
+	DeviceID  string
+	Retention retention.Policy
+	Now       func() time.Time
+	sess      *sessions
 }
 
 func (s *Server) Handler() http.Handler {
@@ -54,6 +57,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/v1/incidents", s.require(anyAuth, s.handleCreateIncident))
 	mux.Handle("GET /api/v1/incidents/{id}", s.require(anyAuth, s.handleGetIncident))
 	mux.Handle("DELETE /api/v1/incidents/{id}", s.require(anyAuth, s.handleDeleteIncident))
+	mux.Handle("GET /api/v1/storage", s.require(anyAuth, s.handleStorage))
 	mux.Handle("GET /api/v1/network", s.require(anyAuth, s.handleNetwork))
 	mux.Handle("GET /api/v1/experiments", s.require(anyAuth, s.handleListExperiments))
 	mux.Handle("POST /api/v1/experiments", s.require(anyAuth, s.handleCreateExperiment))
@@ -316,4 +320,13 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
+}
+
+func (s *Server) handleStorage(w http.ResponseWriter, r *http.Request) {
+	info, err := storage.Load(r.Context(), s.Store, s.Retention, s.Now())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "falha ao ler o armazenamento")
+		return
+	}
+	writeJSON(w, http.StatusOK, info)
 }
