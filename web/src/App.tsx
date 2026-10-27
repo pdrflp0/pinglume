@@ -48,7 +48,7 @@ function useDashboard(range: ViewRange) {
       setLoad({ status, timeline, incidents, failure: null, loading: false });
     } catch (e) {
       const err = e instanceof ApiError ? e : new ApiError("error", String(e));
-      // Mantém a última leitura boa e o instante da primeira falha.
+
       setLoad((prev) => ({
         ...prev,
         failure: { kind: err.kind, message: err.message, since: prev.failure?.since ?? new Date() },
@@ -75,7 +75,6 @@ export function App() {
   const [announcement, setAnnouncement] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
 
-  // Anuncia mudanças de estado do agente para leitores de tela.
   const lastState = useRef<CoverageState | null>(null);
   useEffect(() => {
     if (data && lastState.current && lastState.current !== data.state) {
@@ -241,7 +240,6 @@ interface RangeBarProps {
   onPan: (fraction: number) => void;
 }
 
-/** Controles do período, numa linha acima de tudo que ele afeta. */
 function RangeBar({ range, label, onChange, onZoom, onPan }: RangeBarProps) {
   return (
     <div className="rangebar" role="toolbar" aria-label="Período exibido">

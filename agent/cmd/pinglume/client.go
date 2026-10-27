@@ -15,7 +15,6 @@ import (
 	"time"
 )
 
-// apiCall faz um pedido autenticado à API local do agente em execução.
 func apiCall(c common, method, path string, out any) error {
 	return apiCallBody(c, method, path, nil, out)
 }
@@ -74,7 +73,7 @@ func cmdPause(args []string, pause bool) error {
 	if err := apiCall(c, "POST", "/api/v1/"+name, &resp); err != nil {
 		return err
 	}
-	// O agente só responde depois de aplicar e gravar o novo estado.
+
 	if resp.State == "paused" {
 		fmt.Println("medição pausada; nenhuma nova sonda será iniciada até `pinglume resume`")
 	} else {
@@ -83,8 +82,6 @@ func cmdPause(args []string, pause bool) error {
 	return nil
 }
 
-// cmdOpen pede um código de uso único (válido por 60 s) e abre o navegador.
-// O código vira um cookie de sessão; o token em si nunca vai para o navegador.
 func cmdOpen(args []string) error {
 	fs := flag.NewFlagSet("open", flag.ExitOnError)
 	var c common
@@ -102,5 +99,5 @@ func cmdOpen(args []string) error {
 		return nil
 	}
 	fmt.Println("abrindo o dashboard (link de uso único, válido por 60 s)")
-	return exec.Command("open", url).Run() // macOS; outras plataformas no Nível 2
+	return exec.Command("open", url).Run()
 }

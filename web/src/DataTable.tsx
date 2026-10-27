@@ -4,7 +4,6 @@ import { coverageSegments } from "./Timeline";
 
 const fmt = new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
-/** Equivalente textual do gráfico: os mesmos números, em tabela. */
 export function DataTable({ data }: { data: TimelineData }) {
   const from = Date.parse(data.from);
   const to = Date.parse(data.to);

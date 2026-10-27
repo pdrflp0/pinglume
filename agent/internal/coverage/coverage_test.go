@@ -33,7 +33,6 @@ func newTracker(st *store.Store, dev string, clk clock.Clock) *Tracker {
 	return &Tracker{Store: st, Clock: clk, DeviceID: dev, Heartbeat: hb}
 }
 
-// heartbeats avança o relógio em passos normais, chamando Tick em cada um.
 func heartbeats(t *testing.T, tr *Tracker, clk *clock.Fake, n int) {
 	t.Helper()
 	for range n {
@@ -93,7 +92,7 @@ func TestSleepBecomesSuspendedGap(t *testing.T) {
 	tr.Start(context.Background(), Measuring)
 	heartbeats(t, tr, clk, 2)
 
-	clk.Advance(time.Second) // agente ainda rodou 1 s antes de dormir
+	clk.Advance(time.Second)
 	clk.Sleep(10 * time.Minute)
 	clk.Advance(4 * time.Second)
 	dets, err := tr.Tick(context.Background())
@@ -104,7 +103,7 @@ func TestSleepBecomesSuspendedGap(t *testing.T) {
 	if got := states(ivs); !eq(got, []string{Measuring, Suspended, Measuring}) {
 		t.Fatalf("estados = %v", got)
 	}
-	// A lacuna tem ~10 min: o tempo monotônico do tick (5 s) fica fora dela.
+
 	if d := ivs[1].Duration(); d != 10*time.Minute {
 		t.Fatalf("lacuna de suspensão = %s", d)
 	}
@@ -140,7 +139,7 @@ func TestStalledAgentIsAgentDown(t *testing.T) {
 	tr := newTracker(st, dev, clk)
 	tr.Start(context.Background(), Measuring)
 	heartbeats(t, tr, clk, 1)
-	clk.Advance(2 * time.Minute) // processo parado, mas o Mac acordado
+	clk.Advance(2 * time.Minute)
 	dets, _ := tr.Tick(context.Background())
 	if len(dets) != 1 || dets[0].Kind != AgentDown {
 		t.Fatalf("esperava agent_down por heartbeat atrasado: %+v", dets)
@@ -156,7 +155,7 @@ func TestCrashThenRestartRecordsGapFromLastHeartbeat(t *testing.T) {
 	tr.Start(context.Background(), Measuring)
 	heartbeats(t, tr, clk, 3)
 	lastAlive := clk.Now()
-	// "crash": nenhum Stop. 20 minutos depois, nova execução.
+
 	clk.Advance(20 * time.Minute)
 	tr2 := newTracker(st, dev, clk)
 	dets, err := tr2.Start(context.Background(), Measuring)
@@ -203,8 +202,6 @@ func TestPauseResume(t *testing.T) {
 	}
 }
 
-// Medições gravadas depois do último heartbeat também provam que o agente
-// estava vivo: a lacuna do crash começa na mais recente delas.
 func TestCrashGapStartsAtLastObservation(t *testing.T) {
 	ctx := context.Background()
 	st, dev, clk := setup(t)
@@ -213,7 +210,7 @@ func TestCrashGapStartsAtLastObservation(t *testing.T) {
 	heartbeats(t, tr, clk, 2)
 	pd, _ := st.EnsureProbeDefinition(ctx, store.Endpoint{Label: "ep", Host: "h", Owner: "dev"},
 		store.ProbeDefinition{Kind: "tcp", Target: "h:1", Interval: time.Second, Timeout: time.Millisecond, ProtocolVersion: 1}, t0)
-	obsAt := clk.Now().Add(3 * time.Second) // entre o último heartbeat e o crash
+	obsAt := clk.Now().Add(3 * time.Second)
 	st.InsertObservation(ctx, store.Observation{ID: "o1", DeviceID: dev, ProbeDefID: pd.ID, Seq: 1,
 		StartedWall: obsAt, Status: "ok", ReceivedAt: obsAt})
 

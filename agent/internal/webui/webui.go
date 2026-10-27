@@ -1,6 +1,3 @@
-// Package webui embute o build do dashboard (web/ → static/) no binário.
-// Sem `make web`, static/ só tem o README e o agente avisa que o dashboard
-// não foi compilado.
 package webui
 
 import (
@@ -11,7 +8,6 @@ import (
 //go:embed all:static
 var embedded embed.FS
 
-// FS devolve os arquivos do dashboard, ou nil se o build não foi feito.
 func FS() fs.FS {
 	sub, err := fs.Sub(embedded, "static")
 	if err != nil {

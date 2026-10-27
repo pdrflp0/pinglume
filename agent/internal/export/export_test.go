@@ -20,7 +20,6 @@ var t0 = time.Date(2026, 10, 25, 20, 0, 0, 0, time.UTC)
 const sensitiveNote = "ligação com fulano@exemplo.com, tel +55 11 98765-4321, roteador 192.168.1.1 " +
 	"aa:bb:cc:dd:ee:ff no MacBook de Fulano Silva <script>alert(1)</script>"
 
-// leaks são trechos que não podem aparecer em nenhuma exportação padrão.
 var leaks = []string{"Fulano", "fulano@", "98765", "192.168.1", "10.0.0.7", "aa:bb:cc", "en0", "<script>alert"}
 
 func seed(t *testing.T) *store.Store {
@@ -105,7 +104,7 @@ func TestDefaultExportHasNoKnownIdentifiers(t *testing.T) {
 	if s.Incidents[0].Note != nil {
 		t.Fatal("observação deveria ser omitida por padrão")
 	}
-	// O que sustenta a análise continua lá.
+
 	if !strings.Contains(js, "incident-v1") || !strings.Contains(js, "compare-v1") || !strings.Contains(html, "conexão recusada") {
 		t.Fatal("exportação perdeu método ou resultados")
 	}
@@ -181,7 +180,7 @@ func TestSaveIsImmutableAndHashed(t *testing.T) {
 	if strings.Contains(html, "Comparações guiadas") {
 		t.Fatal("seção não pedida apareceu")
 	}
-	// Uma segunda gravação com o mesmo ID falha: snapshot não é sobrescrito.
+
 	if _, err := Save(ctx, st, s, opt); err == nil {
 		t.Fatal("snapshot existente não pode ser sobrescrito")
 	}

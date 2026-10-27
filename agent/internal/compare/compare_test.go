@@ -38,14 +38,12 @@ func newFx(t *testing.T) *fx {
 			store.ProbeDefinition{Kind: k, Target: k, Interval: 10 * time.Second, Timeout: time.Second, ProtocolVersion: 1}, t0)
 		f.defs[k] = d.ID
 	}
-	// O agente mediu o tempo todo.
+
 	st.Transition(ctx, f.dev, t0, nil, &store.Interval{Start: t0.Add(-time.Hour), State: "measuring"})
 	st.ExtendOpen(ctx, f.dev, t0.Add(3*time.Hour))
 	return f
 }
 
-// obs grava uma execução a cada 10 s em [a, b); latência = base ± 10%;
-// failEvery > 0 faz uma em cada failEvery execuções falhar.
 func (f *fx) obs(kind string, a, b time.Time, base time.Duration, failEvery int) {
 	ctx := context.Background()
 	i := 0
@@ -140,7 +138,7 @@ func TestFailuresMakeItWorse(t *testing.T) {
 	f := newFx(t)
 	for _, k := range []string{"tcp", "https"} {
 		f.obs(k, aFrom, aTo, 5*time.Millisecond, 0)
-		f.obs(k, bFrom, bTo, 5*time.Millisecond, 4) // 25% de falhas em B
+		f.obs(k, bFrom, bTo, 5*time.Millisecond, 4)
 	}
 	r := f.compute(f.experiment(nil))
 	if p := probe(r, "tcp"); p.Failures.Verdict != Worse || r.Verdict != Worse {
@@ -150,7 +148,7 @@ func TestFailuresMakeItWorse(t *testing.T) {
 
 func TestNoisySmallDifferenceIsNotAClaim(t *testing.T) {
 	f := newFx(t)
-	// Latência que alterna 1 ms e 40 ms: muita variação, diferença pequena.
+
 	ctx := context.Background()
 	for i, w := range [][2]time.Time{{aFrom, aTo}, {bFrom, bTo}} {
 		n := 0
@@ -177,7 +175,7 @@ func TestNoisySmallDifferenceIsNotAClaim(t *testing.T) {
 func TestLowCoverageNotComparable(t *testing.T) {
 	f := newFx(t)
 	f.obs("tcp", aFrom, aTo, 5*time.Millisecond, 0)
-	f.obs("tcp", bFrom, bFrom.Add(5*time.Minute), 5*time.Millisecond, 0) // metade da janela B
+	f.obs("tcp", bFrom, bFrom.Add(5*time.Minute), 5*time.Millisecond, 0)
 	r := f.compute(f.experiment(nil))
 	p := probe(r, "tcp")
 	if p.Comparable || r.Verdict != NotComparable || !strings.Contains(strings.Join(p.Reasons, " "), "janela B") {

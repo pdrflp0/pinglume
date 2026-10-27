@@ -1,17 +1,3 @@
-// Package incident associa um relato ("travou agora") às medições próximas
-// e produz uma interpretação descritiva, com limites explícitos.
-//
-// Regra incident-v1:
-//   - janela de análise: [relato − 5 min, relato + 1 min] (a pessoa costuma
-//     marcar depois do problema);
-//   - linha de base: as 2 h anteriores à janela, mesma definição de sonda;
-//   - falha ou lentidão medida na janela é evidência mesmo com cobertura
-//     parcial (o resultado traz a ressalva); já a ausência de degradação só
-//     conta se o agente mediu ao menos 50% da janela — senão, "sem cobertura";
-//   - degradação numa sonda: alguma falha na janela com taxa acima da linha de
-//     base, ou mediana da janela acima de 2× a mediana e acima do p95 da base
-//     (exige ≥ 10 execuções ok na base);
-//   - coincidência temporal nunca é apresentada como causa.
 package incident
 
 import (
@@ -51,21 +37,18 @@ type Stats struct {
 }
 
 type ProbeResult struct {
-	ProbeDefID      string `json:"probeDefId"`
-	Endpoint        string `json:"endpoint"`
-	Kind            string `json:"kind"`
-	ProtocolVersion int    `json:"protocolVersion"`
-	Window          Stats  `json:"window"`
-	Baseline        Stats  `json:"baseline"`
-	// Coverage: execuções na janela ÷ esperadas pelo tempo medindo.
-	Coverage *float64 `json:"coverage"`
-	Failing  bool     `json:"failing"`
-	Slow     bool     `json:"slow"`
-	// NoBaseline: base insuficiente para julgar a latência.
-	NoBaseline bool `json:"noBaseline"`
+	ProbeDefID      string   `json:"probeDefId"`
+	Endpoint        string   `json:"endpoint"`
+	Kind            string   `json:"kind"`
+	ProtocolVersion int      `json:"protocolVersion"`
+	Window          Stats    `json:"window"`
+	Baseline        Stats    `json:"baseline"`
+	Coverage        *float64 `json:"coverage"`
+	Failing         bool     `json:"failing"`
+	Slow            bool     `json:"slow"`
+	NoBaseline      bool     `json:"noBaseline"`
 }
 
-// Finding é uma frase da interpretação e as entradas que a sustentam.
 type Finding struct {
 	Text       string   `json:"text"`
 	ProbeDefID string   `json:"probeDefId,omitempty"`
@@ -85,12 +68,9 @@ type Analysis struct {
 	Alternatives []string      `json:"alternatives"`
 	NextTest     string        `json:"nextTest"`
 	Caveats      []string      `json:"caveats"`
-	// Final: a janela já fechou; a análise não muda mais e foi gravada.
-	Final bool `json:"final"`
+	Final        bool          `json:"final"`
 }
 
-// Analyze calcula a interpretação. liveUntil estende o intervalo de
-// cobertura aberto (só o agente vivo passa "agora").
 func Analyze(ctx context.Context, st *store.Store, inc store.Incident, now, liveUntil time.Time) (Analysis, error) {
 	t := inc.ReportedAt
 	a := Analysis{
@@ -143,7 +123,7 @@ func Analyze(ctx context.Context, st *store.Store, inc store.Incident, now, live
 			order = append(order, r.ProbeDefID)
 		}
 		if r.Status == "cancelled" {
-			continue // cancelamento é do agente, não diz nada da rede
+			continue
 		}
 		s, oks := &x.res.Baseline, &x.baseO
 		if !r.Started.Before(a.WindowFrom) {
@@ -319,7 +299,7 @@ func interpret(a *Analysis) {
 
 	if len(failing)+len(slow) == 0 {
 		if measuredFrac < minCoverage {
-			a.Caveats = nil // as ressalvas acima pressupõem medições suficientes
+			a.Caveats = nil
 			noCoverage()
 			return
 		}
@@ -362,9 +342,6 @@ func interpret(a *Analysis) {
 	a.NextTest = "Faça uma comparação guiada: repita uma janela de 10 minutos por cabo (ou perto do roteador) e compare com o Wi-Fi atual."
 }
 
-// Load devolve a interpretação gravada para o relato ou calcula uma nova.
-// Quando a janela já fechou, o resultado é gravado e passa a ser imutável
-// para esta versão da regra.
 func Load(ctx context.Context, st *store.Store, inc store.Incident, now, liveUntil time.Time) (Analysis, error) {
 	if body, ok, err := st.Interpretation(ctx, inc.ID, RuleVersion); err != nil {
 		return Analysis{}, err

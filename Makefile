@@ -2,7 +2,6 @@
 
 STATIC := agent/internal/webui/static
 
-# O dashboard é embutido no binário: `build` compila web/ antes do agente.
 build: web
 	cd agent && go build -o bin/pinglume ./cmd/pinglume
 	cd probe-server && go build -o bin/probe-server .
@@ -25,8 +24,6 @@ clean:
 	rm -rf agent/bin probe-server/bin
 	find $(STATIC) -mindepth 1 ! -name README -exec rm -rf {} +
 
-# Testbed local: em um terminal `make dev-server`, em outro `make dev-agent`,
-# depois `agent/bin/pinglume open --data-dir .dev-data`.
 dev-server:
 	probe-server/bin/probe-server -tcp 127.0.0.1:9443 -dns 127.0.0.1:15353 -admin 127.0.0.1:9900
 

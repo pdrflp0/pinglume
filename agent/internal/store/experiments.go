@@ -12,7 +12,7 @@ import (
 type Condition struct {
 	Key    string `json:"key"`
 	Value  string `json:"value"`
-	Source string `json:"source"` // declared | detected
+	Source string `json:"source"`
 	Method string `json:"method,omitempty"`
 }
 
@@ -21,7 +21,7 @@ type Window struct {
 	Role       string      `json:"role"`
 	Start      time.Time   `json:"start"`
 	PlannedEnd time.Time   `json:"plannedEnd"`
-	End        *time.Time  `json:"end"` // nil enquanto não foi encerrada por cancelamento
+	End        *time.Time  `json:"end"`
 	Conditions []Condition `json:"conditions"`
 }
 
@@ -43,7 +43,6 @@ func (s *Store) InsertExperiment(ctx context.Context, deviceID string, e Experim
 	return e, err
 }
 
-// AddWindow abre uma janela com suas condições, numa transação.
 func (s *Store) AddWindow(ctx context.Context, experimentID string, w Window) (Window, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -66,7 +65,6 @@ func (s *Store) AddWindow(ctx context.Context, experimentID string, w Window) (W
 	return w, tx.Commit()
 }
 
-// CancelExperiment marca o cancelamento e encerra a janela em andamento.
 func (s *Store) CancelExperiment(ctx context.Context, id string, at time.Time) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -156,7 +154,6 @@ func (s *Store) windows(ctx context.Context, experimentID string) ([]Window, err
 	return out, nil
 }
 
-// Experiments lista do mais recente para o mais antigo.
 func (s *Store) Experiments(ctx context.Context, limit int) ([]Experiment, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT id FROM experiments ORDER BY created_at_ms DESC LIMIT ?`, limit)
 	if err != nil {

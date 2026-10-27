@@ -32,8 +32,6 @@ func total(t *testing.T, st *store.Store, since time.Time) int {
 	return n
 }
 
-// Pausa interrompe novas medições em ≤ 1 s, persiste entre reinícios e a
-// retomada volta a medir.
 func TestPauseStopsMeasuringAndSurvivesRestart(t *testing.T) {
 	ctx := context.Background()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -116,7 +114,6 @@ func TestPauseStopsMeasuringAndSurvivesRestart(t *testing.T) {
 		t.Fatalf("%d medições começaram durante a pausa", n)
 	}
 
-	// Reinício com a pausa ativa: continua pausado.
 	cancel()
 	if err := <-done; err != nil {
 		t.Fatal(err)

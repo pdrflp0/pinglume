@@ -10,7 +10,6 @@ const WHEN = [
   { label: "há 10 min", ms: 600_000 },
 ];
 
-/** Diálogo do relato. Usa <dialog> nativo: foco preso, Esc fecha. */
 export function ReportDialog({
   open,
   onClose,
@@ -169,7 +168,7 @@ function IncidentDetailView({ id, onDeleted }: { id: string; onDeleted: () => vo
         .then((d) => alive && setDetail(d))
         .catch((e) => alive && setError(String(e.message ?? e)));
     load();
-    // Enquanto a janela não fecha, a análise ainda muda.
+
     const t = setInterval(() => detail?.analysis.final || load(), 5000);
     return () => {
       alive = false;

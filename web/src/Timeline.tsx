@@ -15,10 +15,6 @@ export interface Segment {
   reason: string;
 }
 
-/**
- * Cobre [from, to] inteiro: intervalos registrados mais os buracos entre eles,
- * marcados como "sem registro". Nada fica implicitamente "ok".
- */
 export function coverageSegments(cov: TimelineData["coverage"], from: number, to: number): Segment[] {
   const segs = cov
     .map((c) => ({
@@ -41,7 +37,6 @@ export function coverageSegments(cov: TimelineData["coverage"], from: number, to
   return out;
 }
 
-/** Trechos contínuos de latência: quebra a linha em lacunas e saltos longos. */
 function runs(s: Series, bucketMs: number, gaps: Segment[]): Bucket[][] {
   const maxJump = Math.max(bucketMs, s.intervalMs) * 2.5;
   const out: Bucket[][] = [];
@@ -94,7 +89,7 @@ export function Timeline({ data, incidents, onIncident, onSelect, onZoom, onPan,
   const [width, setWidth] = useState(720);
   useEffect(() => {
     const el = wrap.current;
-    if (!el || typeof ResizeObserver === "undefined") return; // sem suporte: largura padrão
+    if (!el || typeof ResizeObserver === "undefined") return;
     const ro = new ResizeObserver(([e]) => setWidth(Math.max(280, Math.floor(e.contentRect.width))));
     ro.observe(el);
     return () => ro.disconnect();
@@ -108,18 +103,16 @@ export function Timeline({ data, incidents, onIncident, onSelect, onZoom, onPan,
   const yMax = useMemo(() => {
     let m = 0;
     for (const s of data.series) for (const b of s.buckets) if (b.p95Us !== null) m = Math.max(m, b.p95Us);
-    return niceMax(m / 1000); // em ms
+    return niceMax(m / 1000);
   }, [data.series]);
   const ticks = useMemo(() => timeTicks(from, to, Math.max(3, Math.floor(plotW / 110))), [from, to, plotW]);
 
-  // Cursor: índice do balde sob o ponteiro ou o foco do teclado.
   const nBuckets = Math.max(1, Math.ceil(span / bucketMs));
   const [cursor, setCursor] = useState<number | null>(null);
   useEffect(() => setCursor((c) => (c === null ? null : Math.min(c, nBuckets - 1))), [nBuckets]);
   const cursorT = cursor === null ? null : from + cursor * bucketMs;
   const idxAt = (t: number) => Math.min(nBuckets - 1, Math.max(0, Math.floor((t - from) / bucketMs)));
 
-  // Arrastar para aproximar.
   const [brush, setBrush] = useState<{ a: number; b: number } | null>(null);
   function localX(e: PointerEvent) {
     const r = e.currentTarget.getBoundingClientRect();
@@ -185,8 +178,7 @@ export function Timeline({ data, incidents, onIncident, onSelect, onZoom, onPan,
   const strokeY = (us: number) => PLOT_H - Math.min(1, us / 1000 / yMax) * PLOT_H;
   const yTicks = [0, yMax / 2, yMax];
   const cursorX = cursorT === null ? null : x(cursorT + bucketMs / 2);
-  // Relatos são marcados à parte das medições: losango acima da faixa de
-  // cobertura e linha tracejada atravessando os painéis.
+
   const marks = incidents
     .map((i) => ({ ...i, t: Date.parse(i.reportedAt) }))
     .filter((i) => i.t >= from && i.t <= to);
@@ -367,7 +359,6 @@ function formatMs(v: number): string {
 }
 
 function Patterns() {
-  // Hachuras para estados sem medição: a textura carrega o significado além da cor.
   const defs: [CoverageState, number, number][] = [
     ["paused", 90, 6],
     ["suspended", 45, 6],

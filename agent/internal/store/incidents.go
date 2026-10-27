@@ -65,8 +65,6 @@ func (s *Store) Incidents(ctx context.Context, from, to time.Time) ([]Incident, 
 	return out, rows.Err()
 }
 
-// DeleteIncident apaga o relato e sua interpretação. Exclusão local é
-// definitiva; a sincronização futura não pode ressuscitá-lo.
 func (s *Store) DeleteIncident(ctx context.Context, id string) error {
 	res, err := s.db.ExecContext(ctx, `DELETE FROM incidents WHERE id = ?`, id)
 	if err != nil {
@@ -78,7 +76,6 @@ func (s *Store) DeleteIncident(ctx context.Context, id string) error {
 	return nil
 }
 
-// Interpretation devolve o corpo gravado para (incidente, versão da regra).
 func (s *Store) Interpretation(ctx context.Context, incidentID, ruleVersion string) (string, bool, error) {
 	var body string
 	err := s.db.QueryRowContext(ctx,
@@ -89,7 +86,6 @@ func (s *Store) Interpretation(ctx context.Context, incidentID, ruleVersion stri
 	return body, err == nil, err
 }
 
-// SaveInterpretation grava uma vez; uma segunda gravação da mesma versão é ignorada.
 func (s *Store) SaveInterpretation(ctx context.Context, incidentID, ruleVersion, verdict, body string, now time.Time) error {
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO interpretations (id, incident_id, rule_version, verdict, body_json, created_at_ms)

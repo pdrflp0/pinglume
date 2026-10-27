@@ -69,8 +69,7 @@ var funcs = template.FuncMap{
 		return t.Local().Format("02/01/2006 15:04:05")
 	},
 	"clock": func(t time.Time) string { return t.Local().Format("15:04:05") },
-	// until mostra só o horário quando o fim é no mesmo dia do início, e a
-	// data completa quando não é (senão uma lacuna de 25 h parece de 1 h).
+
 	"until": func(start, end time.Time) string {
 		a, b := start.Local(), end.Local()
 		if a.YearDay() == b.YearDay() && a.Year() == b.Year() {
@@ -92,7 +91,7 @@ var funcs = template.FuncMap{
 		}
 		return "declarada"
 	},
-	// bar devolve os segmentos da barra de cobertura com largura em %.
+
 	"bar": func(c CoverageDoc) []struct {
 		State string
 		Pct   float64
@@ -252,8 +251,6 @@ Esquema {{.S.SchemaVersion}} · identificador {{.S.ID}}{{if .Digest}} · SHA-256
 </html>
 `))
 
-// RenderHTML gera o HTML autocontido. digest é o SHA-256 do JSON gerado junto
-// (vazio na prévia).
 func RenderHTML(s Snapshot, digest string) (string, error) {
 	var b bytes.Buffer
 	err := page.Execute(&b, struct {

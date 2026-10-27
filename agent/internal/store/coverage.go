@@ -20,8 +20,6 @@ type Interval struct {
 
 func (iv Interval) Duration() time.Duration { return iv.End.Sub(iv.Start) }
 
-// OpenInterval devolve o intervalo aberto do dispositivo, se houver. Encontrar
-// um na partida significa que a execução anterior não encerrou normalmente.
 func (s *Store) OpenInterval(ctx context.Context, deviceID string) (*Interval, error) {
 	iv := Interval{Open: true}
 	var startMS, endMS int64
@@ -39,7 +37,6 @@ func (s *Store) OpenInterval(ctx context.Context, deviceID string) (*Interval, e
 	return &iv, nil
 }
 
-// LastIntervalEnd devolve o fim do intervalo mais recente (aberto ou não).
 func (s *Store) LastIntervalEnd(ctx context.Context, deviceID string) (time.Time, bool, error) {
 	var endMS sql.NullInt64
 	err := s.db.QueryRowContext(ctx,
@@ -50,9 +47,6 @@ func (s *Store) LastIntervalEnd(ctx context.Context, deviceID string) (time.Time
 	return time.UnixMilli(endMS.Int64), true, nil
 }
 
-// Transition aplica numa única transação: fecha o intervalo aberto em closeAt
-// (se houver), grava intervalos já fechados (lacunas detectadas) e abre um novo
-// intervalo (se next != nil). Um crash no meio não deixa a cobertura incoerente.
 func (s *Store) Transition(ctx context.Context, deviceID string, closeAt time.Time, closed []Interval, next *Interval) (string, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -60,7 +54,6 @@ func (s *Store) Transition(ctx context.Context, deviceID string, closeAt time.Ti
 	}
 	defer tx.Rollback()
 
-	// MAX evita que um intervalo termine antes de começar quando o relógio volta.
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE coverage_intervals SET end_wall_ms = MAX(start_wall_ms, ?), is_open = 0
 		WHERE device_id = ? AND is_open = 1`, closeAt.UnixMilli(), deviceID); err != nil {
@@ -90,7 +83,6 @@ func (s *Store) Transition(ctx context.Context, deviceID string, closeAt time.Ti
 	return openID, tx.Commit()
 }
 
-// ExtendOpen move o fim do intervalo aberto para "agora" (heartbeat).
 func (s *Store) ExtendOpen(ctx context.Context, deviceID string, end time.Time) error {
 	_, err := s.db.ExecContext(ctx, `
 		UPDATE coverage_intervals SET end_wall_ms = MAX(start_wall_ms, ?)
@@ -98,7 +90,6 @@ func (s *Store) ExtendOpen(ctx context.Context, deviceID string, end time.Time) 
 	return err
 }
 
-// Intervals devolve os intervalos que tocam [since, until], recortados a ele.
 func (s *Store) Intervals(ctx context.Context, since, until time.Time) ([]Interval, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, start_wall_ms, end_wall_ms, state, reason, detected_by, is_open
@@ -144,9 +135,6 @@ func (s *Store) SetState(ctx context.Context, key, value string) error {
 	return err
 }
 
-// ExtendLive estende o intervalo aberto até liveUntil (limitado a "to"). Só o
-// agente em execução pode afirmar que continuou no estado até agora; quem lê
-// o banco de fora passa liveUntil zero e o intervalo fica no último heartbeat.
 func ExtendLive(ivs []Interval, liveUntil, to time.Time) []Interval {
 	if liveUntil.IsZero() {
 		return ivs

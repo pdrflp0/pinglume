@@ -1,9 +1,5 @@
 import type { RangeQuery } from "./api";
 
-/**
- * Período exibido. "Ao vivo" acompanha o relógio (últimos N ms); depois de um
- * zoom ou deslocamento o período fica fixo até a pessoa voltar ao vivo.
- */
 export type ViewRange = { live: true; spanMs: number } | { live: false; from: number; to: number };
 
 export const PRESETS = [
@@ -29,7 +25,6 @@ export function toQuery(r: ViewRange): RangeQuery {
   return { from: new Date(r.from), to: new Date(r.to) };
 }
 
-/** Zoom em torno de um instante; fator < 1 aproxima. Nunca passa de agora. */
 export function zoom(r: ViewRange, now: number, factor: number, center?: number): ViewRange {
   const { from, to } = resolve(r, now);
   const span = clampSpan((to - from) * factor);
@@ -44,7 +39,6 @@ export function zoom(r: ViewRange, now: number, factor: number, center?: number)
   return { live: false, from: nf, to: nt };
 }
 
-/** Desloca o período por uma fração do seu tamanho (negativo = passado). */
 export function pan(r: ViewRange, now: number, fraction: number): ViewRange {
   const { from, to } = resolve(r, now);
   const span = to - from;

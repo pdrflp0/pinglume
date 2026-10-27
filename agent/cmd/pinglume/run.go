@@ -27,9 +27,6 @@ import (
 	"pinglume/agent/internal/webui"
 )
 
-// devTargets coleta --dev-target label=ip:porta. Enquanto os endpoints
-// próprios não estão hospedados, o agente só mede alvos de desenvolvimento em
-// loopback ou rede privada: nada de medir serviços de terceiros.
 type devTargets []devTarget
 
 type devTarget struct {
@@ -55,7 +52,6 @@ func (d *devTargets) Set(v string) error {
 	return nil
 }
 
-// controller liga a API ao runner pelo canal de comandos.
 type controller struct {
 	r   *runner.Runner
 	ctl chan runner.Command

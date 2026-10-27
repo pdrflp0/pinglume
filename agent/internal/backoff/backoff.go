@@ -1,6 +1,3 @@
-// Package backoff reconstrói, a partir dos eventos gravados pelo agendador,
-// os períodos em que cada sonda rodou com intervalo ampliado. Nesses períodos
-// a cobertura é menor por decisão do agente, não por falta de rede.
 package backoff
 
 import (
@@ -12,10 +9,9 @@ import (
 )
 
 type Span struct {
-	Start time.Time `json:"start"`
-	End   time.Time `json:"end"`
-	// MaxMultiplier é o maior fator de ampliação do intervalo no período.
-	MaxMultiplier int `json:"maxMultiplier"`
+	Start         time.Time `json:"start"`
+	End           time.Time `json:"end"`
+	MaxMultiplier int       `json:"maxMultiplier"`
 }
 
 type detail struct {
@@ -23,13 +19,8 @@ type detail struct {
 	Multiplier int    `json:"multiplier"`
 }
 
-// lookback cobre backoffs que começaram antes do período pedido. Um backoff
-// mais antigo que isso, ainda aberto, aparece a partir do início do período
-// só se houver eventos dentro dessa margem.
 const lookback = 24 * time.Hour
 
-// Spans devolve os períodos de backoff por definição de sonda, recortados a
-// [from, to]. Um backoff sem evento de fim vai até "to".
 func Spans(ctx context.Context, st *store.Store, from, to time.Time) (map[string][]Span, error) {
 	evs, err := st.SystemEvents(ctx, from.Add(-lookback), to)
 	if err != nil {
@@ -75,7 +66,6 @@ func Spans(ctx context.Context, st *store.Store, from, to time.Time) (map[string
 	return out, nil
 }
 
-// Total soma a duração dos períodos.
 func Total(spans []Span) time.Duration {
 	var t time.Duration
 	for _, s := range spans {

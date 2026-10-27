@@ -1,4 +1,3 @@
-// Package store persiste observações, definições de sonda e eventos em SQLite.
 package store
 
 import (
@@ -25,8 +24,6 @@ type Store struct {
 	db *sql.DB
 }
 
-// Open abre (ou cria) o banco e aplica migrações pendentes, cada uma em sua
-// própria transação. Uma migração que falha não deixa o schema pela metade.
 func Open(ctx context.Context, path string) (*Store, error) {
 	dsn := "file:" + path +
 		"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)&_pragma=synchronous(NORMAL)"
@@ -34,7 +31,7 @@ func Open(ctx context.Context, path string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Um único escritor evita SQLITE_BUSY dentro do próprio processo.
+
 	db.SetMaxOpenConns(1)
 	s := &Store{db: db}
 	if err := s.migrate(ctx); err != nil {
@@ -95,7 +92,6 @@ func (s *Store) migrate(ctx context.Context) error {
 	return nil
 }
 
-// SchemaVersion devolve a maior migração aplicada.
 func (s *Store) SchemaVersion(ctx context.Context) (int, error) {
 	var v sql.NullInt64
 	err := s.db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&v)
@@ -106,7 +102,6 @@ type Device struct {
 	ID, Name, OS, Arch, AgentVersion string
 }
 
-// EnsureDevice devolve o dispositivo desta instalação, criando-o na primeira vez.
 func (s *Store) EnsureDevice(ctx context.Context, d Device, now time.Time) (Device, error) {
 	var got Device
 	err := s.db.QueryRowContext(ctx,
@@ -145,8 +140,6 @@ type ProbeDefinition struct {
 	ParamsJSON      string
 }
 
-// EnsureProbeDefinition reutiliza a definição idêntica existente ou cria uma
-// nova versão. Definições nunca são alteradas no lugar.
 func (s *Store) EnsureProbeDefinition(ctx context.Context, ep Endpoint, pd ProbeDefinition, now time.Time) (ProbeDefinition, error) {
 	if pd.ParamsJSON == "" {
 		pd.ParamsJSON = "{}"
@@ -191,7 +184,6 @@ func (s *Store) EnsureProbeDefinition(ctx context.Context, ep Endpoint, pd Probe
 	return pd, tx.Commit()
 }
 
-// NextSeq devolve a próxima sequência de uma sonda, continuando após reinícios.
 func (s *Store) NextSeq(ctx context.Context, probeDefID string) (int64, error) {
 	var maxSeq sql.NullInt64
 	err := s.db.QueryRowContext(ctx,
@@ -232,8 +224,6 @@ func (s *Store) InsertSystemEvent(ctx context.Context, at time.Time, kind, detai
 	return err
 }
 
-// ProbeSummary descreve uma sonda num período. Durações só entram nos
-// percentis quando o status é ok: um timeout não tem latência.
 type ProbeSummary struct {
 	ProbeDefID                  string
 	Kind, Target, EndpointLabel string
@@ -241,7 +231,7 @@ type ProbeSummary struct {
 	Interval                    time.Duration
 	Total                       int
 	ByStatus                    map[string]int
-	OKDurations                 []time.Duration // ordenadas
+	OKDurations                 []time.Duration
 	LastStarted                 time.Time
 }
 
@@ -291,7 +281,6 @@ func (s *Store) Summaries(ctx context.Context, since time.Time) ([]ProbeSummary,
 	return out, rows.Err()
 }
 
-// ObservationRow é uma observação com os metadados da sonda, para séries temporais.
 type ObservationRow struct {
 	ProbeDefID      string
 	Kind            string
@@ -304,7 +293,6 @@ type ObservationRow struct {
 	Status          string
 }
 
-// ObservationsBetween devolve as observações iniciadas em [from, to), em ordem de tempo.
 func (s *Store) ObservationsBetween(ctx context.Context, from, to time.Time) ([]ObservationRow, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT pd.id, pd.kind, pd.target, e.label, pd.protocol_version, pd.interval_ms,
@@ -361,8 +349,6 @@ func (s *Store) SystemEvents(ctx context.Context, from, to time.Time) ([]SystemE
 	return out, rows.Err()
 }
 
-// LastObservationAt devolve quando a observação mais recente do dispositivo
-// foi gravada: também é evidência de que o agente estava vivo.
 func (s *Store) LastObservationAt(ctx context.Context, deviceID string) (time.Time, bool, error) {
 	var ms sql.NullInt64
 	err := s.db.QueryRowContext(ctx,

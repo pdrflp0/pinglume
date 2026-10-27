@@ -12,11 +12,10 @@ CREATE TABLE endpoints (
     label  TEXT NOT NULL,
     host   TEXT NOT NULL,
     region TEXT NOT NULL DEFAULT '',
-    owner  TEXT NOT NULL,          -- 'pinglume' em produção; 'dev' para o testbed local
+    owner  TEXT NOT NULL,
     UNIQUE (label, host, owner)
 );
 
--- Imutável: mudar qualquer parâmetro cria uma nova linha (nova versão).
 CREATE TABLE probe_definitions (
     id               TEXT PRIMARY KEY,
     kind             TEXT NOT NULL CHECK (kind IN ('dns', 'tcp', 'https', 'udp_echo')),
@@ -35,8 +34,8 @@ CREATE TABLE observations (
     device_id       TEXT NOT NULL REFERENCES devices (id),
     probe_def_id    TEXT NOT NULL REFERENCES probe_definitions (id),
     seq             INTEGER NOT NULL,
-    started_wall_ms INTEGER NOT NULL,  -- tempo civil UTC: alinhamento, com incerteza
-    duration_us     INTEGER NOT NULL,  -- tempo monotônico: duração confiável
+    started_wall_ms INTEGER NOT NULL,
+    duration_us     INTEGER NOT NULL,
     status          TEXT NOT NULL CHECK (status IN (
                         'ok', 'timeout', 'refused', 'dns_error', 'tls_error', 'http_error',
                         'net_unreachable', 'cancelled', 'error')),

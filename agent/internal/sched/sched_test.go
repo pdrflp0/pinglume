@@ -16,8 +16,6 @@ import (
 	"pinglume/agent/internal/store"
 )
 
-// Integração: agenda uma sonda real contra um listener local, grava no SQLite
-// e confere que o cancelamento encerra rápido sem perder a sequência.
 func TestRunRecordsAndStopsQuickly(t *testing.T) {
 	ctx := context.Background()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -92,8 +90,6 @@ func (s *scripted) Probe(context.Context) probe.Result {
 	return probe.Result{Status: st, Duration: time.Millisecond}
 }
 
-// Falhas seguidas ampliam o intervalo e geram eventos; a primeira resposta ok
-// encerra o backoff.
 func TestBackoffEventsAndReset(t *testing.T) {
 	ctx := context.Background()
 	st, err := store.Open(ctx, filepath.Join(t.TempDir(), "t.db"))
@@ -105,7 +101,7 @@ func TestBackoffEventsAndReset(t *testing.T) {
 	dev, _ := st.EnsureDevice(ctx, store.Device{Name: "t", AgentVersion: "t"}, now)
 	def, _ := st.EnsureProbeDefinition(ctx, store.Endpoint{Label: "ep", Host: "h", Owner: "dev"},
 		store.ProbeDefinition{Kind: "tcp", Target: "h:1", Interval: 10 * time.Millisecond, Timeout: time.Millisecond, ProtocolVersion: 1}, now)
-	// 3 falhas → ×2, 4ª → ×4, depois ok.
+
 	p := &scripted{results: []string{"refused", "refused", "refused", "refused", "ok"}}
 	s := &Scheduler{Store: st, Clock: clock.System{}, DeviceID: dev.ID, Concurrency: 1,
 		Log: slog.New(slog.NewTextHandler(io.Discard, nil))}

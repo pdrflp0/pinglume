@@ -1,5 +1,3 @@
-// Package summary monta o resumo de cobertura e sondas de um período. É a
-// mesma visão para a CLI (lendo o banco) e para a API local (dashboard).
 package summary
 
 import (
@@ -28,23 +26,16 @@ type Probe struct {
 	Total           int            `json:"total"`
 	OK              int            `json:"ok"`
 	Failures        map[string]int `json:"failures"`
-	// Percentis só das execuções ok, em microssegundos; nil sem execuções ok.
-	P50US *int64 `json:"p50Us"`
-	P95US *int64 `json:"p95Us"`
-	// Coverage = execuções concluídas ÷ esperadas no tempo medindo; nil se
-	// o tempo medindo é curto demais para esperar ao menos uma execução.
-	Coverage *float64 `json:"coverage"`
-	// BackoffMS é o tempo em que a sonda rodou com intervalo ampliado depois
-	// de falhas seguidas: parte da cobertura menor é escolha do agente.
-	BackoffMS   int64     `json:"backoffMs"`
-	LastStarted time.Time `json:"lastStarted"`
+	P50US           *int64         `json:"p50Us"`
+	P95US           *int64         `json:"p95Us"`
+	Coverage        *float64       `json:"coverage"`
+	BackoffMS       int64          `json:"backoffMs"`
+	LastStarted     time.Time      `json:"lastStarted"`
 }
 
 type Summary struct {
-	From time.Time `json:"from"`
-	To   time.Time `json:"to"`
-	// Tempo em cada estado de cobertura, em ms. "unrecorded" é o tempo sem
-	// nenhum intervalo registrado: nem medição, nem lacuna conhecida.
+	From    time.Time        `json:"from"`
+	To      time.Time        `json:"to"`
 	StateMS map[string]int64 `json:"stateMs"`
 	Gaps    []Gap            `json:"gaps"`
 	Probes  []Probe          `json:"probes"`
@@ -52,12 +43,7 @@ type Summary struct {
 
 const Unrecorded = "unrecorded"
 
-// Options ajusta como o intervalo aberto (o atual) é contado.
 type Options struct {
-	// LiveUntil, se não for zero, estende o intervalo aberto até esse instante.
-	// Só o agente em execução pode afirmar isso (a API passa "agora"). Quem lê
-	// o banco de fora (CLI) deixa zero: o intervalo vai até o último heartbeat,
-	// porque o agente pode ter morrido depois dele.
 	LiveUntil time.Time
 }
 
@@ -115,7 +101,6 @@ func Build(ctx context.Context, st *store.Store, from, to time.Time, opt Options
 	return s, nil
 }
 
-// percentile usa o posto mais próximo sobre durações já ordenadas.
 func percentile(sorted []time.Duration, p float64) *int64 {
 	if len(sorted) == 0 {
 		return nil

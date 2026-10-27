@@ -1,20 +1,3 @@
-// Package compare implementa a comparação guiada antes/depois (regra compare-v1).
-//
-// Uma comparação tem duas janelas medidas com as mesmas sondas: A (como está)
-// e B (depois da mudança declarada, ex.: cabo no lugar do Wi-Fi).
-//
-// Pré-condições por sonda, senão ela fica "não comparável" com o motivo:
-//   - a mesma definição de sonda (tipo, versão, parâmetros) nas duas janelas;
-//   - cada janela com pelo menos 10 min;
-//   - cobertura ≥ 80% em cada janela (execuções ÷ esperadas).
-//
-// Para cada sonda comparável, a diferença B − A da mediana de latência (só
-// execuções ok) e da taxa de falha ganha um intervalo de 95% por bootstrap em
-// blocos: observações vizinhas no tempo não são independentes, e reamostrar
-// blocos preserva essa dependência. Só há "melhora" ou "piora" se o intervalo
-// excluir zero E a estimativa passar de um limiar prático; "sem diferença
-// detectável" exige o intervalo inteiro dentro do limiar; o resto é
-// "inconclusivo".
 package compare
 
 import (
@@ -39,14 +22,10 @@ const (
 	minOKForLatency = 10
 	maxGap          = 2 * time.Hour
 	bootstrapRounds = 1000
-	// Limiar prático mínimo de latência. Chamadas trabalham com pacotes de
-	// ~20 ms; diferenças abaixo de 1 ms não mudam a experiência e, em
-	// latências sub-milissegundo, são dominadas por ruído do próprio
-	// computador. (No primeiro ensaio real, 0,2 ms fez o DNS em loopback
-	// "piorar" 0,23 ms e anular uma melhora de 26 ms no HTTPS.)
+
 	latencyFloorUS   = 1000
-	latencyRelative  = 0.10 // ou 10% da mediana de A, o que for maior
-	failureThreshold = 0.02 // 2 pontos percentuais
+	latencyRelative  = 0.10
+	failureThreshold = 0.02
 )
 
 const (
@@ -82,7 +61,6 @@ func windowByRole(e store.Experiment, role string) *store.Window {
 	return nil
 }
 
-// Phase deriva a etapa atual do experimento a partir das janelas e do relógio.
 func Phase(e store.Experiment, now time.Time) string {
 	if e.CancelledAt != nil {
 		return PhaseCancelled
@@ -108,7 +86,7 @@ type WindowStats struct {
 }
 
 type Effect struct {
-	Estimate  float64 `json:"estimate"` // B − A
+	Estimate  float64 `json:"estimate"`
 	CILow     float64 `json:"ciLow"`
 	CIHigh    float64 `json:"ciHigh"`
 	Threshold float64 `json:"threshold"`
@@ -124,10 +102,9 @@ type ProbeComparison struct {
 	Reasons         []string    `json:"reasons"`
 	A               WindowStats `json:"a"`
 	B               WindowStats `json:"b"`
-	// Latency em µs (só execuções ok); Failures em fração (0–1).
-	Latency  *Effect `json:"latency"`
-	Failures *Effect `json:"failures"`
-	Verdict  string  `json:"verdict"`
+	Latency         *Effect     `json:"latency"`
+	Failures        *Effect     `json:"failures"`
+	Verdict         string      `json:"verdict"`
 }
 
 type WindowInfo struct {
@@ -159,8 +136,8 @@ type Result struct {
 type series struct {
 	probe    store.ObservationRow
 	interval time.Duration
-	okDur    []float64 // µs, em ordem de tempo
-	failInd  []float64 // 1 = falha, 0 = ok, em ordem de tempo
+	okDur    []float64
+	failInd  []float64
 }
 
 func collect(rows []store.ObservationRow) map[string]*series {
@@ -199,7 +176,6 @@ func stats(s *series, dur time.Duration) WindowStats {
 	return ws
 }
 
-// Compute aplica compare-v1 a um experimento já encerrado.
 func Compute(ctx context.Context, st *store.Store, e store.Experiment) (Result, error) {
 	res := Result{RuleVersion: RuleVersion, Probes: []ProbeComparison{}, Findings: []Finding{}, Caveats: []string{}}
 	wa, wb := windowByRole(e, "baseline"), windowByRole(e, "intervention")
@@ -208,7 +184,7 @@ func Compute(ctx context.Context, st *store.Store, e store.Experiment) (Result, 
 	}
 	seed := fnv.New64a()
 	seed.Write([]byte(e.ID))
-	rng := rand.New(rand.NewPCG(seed.Sum64(), 0x9e3779b97f4a7c15)) // resultado reprodutível por experimento
+	rng := rand.New(rand.NewPCG(seed.Sum64(), 0x9e3779b97f4a7c15))
 
 	var infos []WindowInfo
 	var sets []map[string]*series
@@ -286,13 +262,11 @@ func Compute(ctx context.Context, st *store.Store, e store.Experiment) (Result, 
 			continue
 		}
 
-		// Falhas: diferença de proporção.
 		fa, fb := mean(sa.failInd), mean(sb.failInd)
 		lo, hi := bootstrapDiff(rng, sa.failInd, sb.failInd, mean)
 		pc.Failures = &Effect{Estimate: fb - fa, CILow: lo, CIHigh: hi, Threshold: failureThreshold}
 		pc.Failures.Verdict = judge(*pc.Failures)
 
-		// Latência: diferença de medianas, se houver execuções ok suficientes.
 		if len(sa.okDur) >= minOKForLatency && len(sb.okDur) >= minOKForLatency {
 			ma, mb := median(sa.okDur), median(sb.okDur)
 			lo, hi := bootstrapDiff(rng, sa.okDur, sb.okDur, median)
@@ -310,7 +284,6 @@ func Compute(ctx context.Context, st *store.Store, e store.Experiment) (Result, 
 	return res, nil
 }
 
-// judge aplica a regra de decisão a um efeito B − A (negativo = B melhor).
 func judge(ef Effect) string {
 	switch {
 	case ef.CIHigh < 0 && ef.Estimate <= -ef.Threshold:
@@ -328,7 +301,7 @@ func combine(lat, fail string) string {
 	has := func(v string) bool { return vs[0] == v || vs[1] == v }
 	switch {
 	case has(Better) && has(Worse):
-		return Inconclusive // melhora numa medida e piora na outra
+		return Inconclusive
 	case has(Better) && !has(Inconclusive):
 		return Better
 	case has(Worse) && !has(Inconclusive):
@@ -341,8 +314,6 @@ func combine(lat, fail string) string {
 	return Inconclusive
 }
 
-// bootstrapDiff devolve o intervalo de 95% de stat(B) − stat(A) por bootstrap
-// em blocos móveis, com blocos de ~√n observações consecutivas.
 func bootstrapDiff(rng *rand.Rand, a, b []float64, stat func([]float64) float64) (float64, float64) {
 	diffs := make([]float64, bootstrapRounds)
 	bufA, bufB := make([]float64, len(a)), make([]float64, len(b))
@@ -392,8 +363,6 @@ func median(x []float64) float64 {
 	return (c[m-1] + c[m]) / 2
 }
 
-// netDuring devolve a interface vigente no início da janela e quantas
-// mudanças de interface houve dentro dela.
 func netDuring(ctx context.Context, st *store.Store, from, to time.Time) (*netctx.Context, int, error) {
 	evs, err := st.SystemEvents(ctx, from.Add(-24*time.Hour), to)
 	if err != nil {
@@ -426,7 +395,6 @@ var netLabel = map[string]string{
 
 func name(p ProbeComparison) string { return fmt.Sprintf("%s (%s)", kindLabel[p.Kind], p.Endpoint) }
 
-// decimal troca o ponto pela vírgula decimal do português.
 func decimal(s string) string { return strings.Replace(s, ".", ",", 1) }
 
 func usText(v float64) string {
@@ -488,7 +456,6 @@ func interpret(r *Result, e store.Experiment) {
 		r.Verdict = Inconclusive
 	}
 
-	// Fatores de confusão.
 	a, b := r.Windows[0], r.Windows[1]
 	if gap := b.Start.Sub(a.End); gap > maxGap {
 		r.Caveats = append(r.Caveats, fmt.Sprintf("As janelas estão separadas por %s; a diferença pode ser do horário, não da mudança.", gap.Round(time.Minute)))
@@ -534,7 +501,6 @@ func interpret(r *Result, e store.Experiment) {
 	}
 }
 
-// Load devolve o resultado gravado ou calcula e grava quando o experimento terminou.
 func Load(ctx context.Context, st *store.Store, e store.Experiment, now time.Time) (*Result, error) {
 	if Phase(e, now) != PhaseDone {
 		return nil, nil

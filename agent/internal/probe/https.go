@@ -13,16 +13,10 @@ import (
 	"time"
 )
 
-// HTTPSGet faz uma requisição pequena com conexão nova a cada execução, para
-// medir DNS (se houver), conexão TCP, handshake TLS e tempo até o primeiro
-// byte. Não usa proxy do sistema: mede o caminho direto até o endpoint.
-//
-// Com URL por IP literal, a sonda não depende de DNS — é assim que dá para
-// distinguir "DNS falhou" de "o servidor não responde".
 type HTTPSGet struct {
 	URL        string
-	ServerName string         // SNI e nome verificado no certificado
-	RootCAs    *x509.CertPool // nil = raízes do sistema
+	ServerName string
+	RootCAs    *x509.CertPool
 	Timeout    time.Duration
 }
 
@@ -52,7 +46,7 @@ func (p HTTPSGet) Probe(ctx context.Context) Result {
 	}
 	defer tr.CloseIdleConnections()
 	client := &http.Client{Transport: tr, CheckRedirect: func(*http.Request, []*http.Request) error {
-		return http.ErrUseLastResponse // redirecionamento não é resposta da sonda
+		return http.ErrUseLastResponse
 	}}
 
 	req, err := http.NewRequestWithContext(httptrace.WithClientTrace(ctx, trace), http.MethodGet, p.URL, nil)

@@ -44,7 +44,6 @@ func TestParseAndClassify(t *testing.T) {
 	}
 }
 
-// No Mac de desenvolvimento, a detecção real precisa devolver algo coerente.
 func TestSystemDetectSmoke(t *testing.T) {
 	c := (&System{}).Detect(context.Background())
 	t.Logf("detectado: %+v", c)

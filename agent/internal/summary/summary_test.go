@@ -9,8 +9,6 @@ import (
 	"pinglume/agent/internal/store"
 )
 
-// O intervalo aberto só é estendido até "agora" quando quem pergunta é o
-// próprio agente vivo; de fora, vale o último heartbeat gravado.
 func TestOpenIntervalLiveVsOffline(t *testing.T) {
 	ctx := context.Background()
 	st, err := store.Open(ctx, filepath.Join(t.TempDir(), "t.db"))
@@ -21,7 +19,7 @@ func TestOpenIntervalLiveVsOffline(t *testing.T) {
 	t0 := time.Date(2026, 10, 20, 21, 0, 0, 0, time.UTC)
 	dev, _ := st.EnsureDevice(ctx, store.Device{Name: "t", AgentVersion: "t"}, t0)
 	st.Transition(ctx, dev.ID, t0, nil, &store.Interval{Start: t0, State: "paused"})
-	st.ExtendOpen(ctx, dev.ID, t0.Add(5*time.Second)) // último heartbeat
+	st.ExtendOpen(ctx, dev.ID, t0.Add(5*time.Second))
 
 	now := t0.Add(8 * time.Second)
 	from := t0.Add(-time.Minute)

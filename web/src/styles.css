@@ -20,8 +20,6 @@
   --error-bg: #fde8e6;
   --error-border: #e2928a;
 
-  /* Gráfico: uma série por painel (slot categórico 1) e falhas com a cor de
-     status "critical"; ambas validadas contra a superfície de cada modo. */
   --series-1: #2a78d6;
   --series-1-band: rgba(42, 120, 214, 0.16);
   --status-critical: #d03b3b;
@@ -276,7 +274,6 @@ main {
   outline-offset: 1px;
 }
 
-/* Barra de cobertura. Lacunas usam hachura além da cor, para não depender só de cor. */
 .covbar {
   display: flex;
   height: 18px;
@@ -438,7 +435,6 @@ tbody th {
   color: #fff;
 }
 
-/* Relatos */
 .tl-marks {
   position: relative;
 }
@@ -508,7 +504,6 @@ tbody th {
   color: var(--muted);
 }
 
-/* Diálogo */
 .dialog {
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -565,7 +560,6 @@ tbody th {
   margin-top: 12px;
 }
 
-/* Comparação guiada */
 .choices.one-col {
   grid-template-columns: 1fr;
 }
@@ -637,7 +631,6 @@ tbody th {
   color: var(--text);
 }
 
-/* Exportação */
 .dialog-actions.start {
   justify-content: flex-start;
 }
@@ -668,7 +661,6 @@ tbody th {
   gap: 8px;
 }
 
-/* Barra de período */
 .rangebar {
   display: flex;
   align-items: center;
@@ -704,7 +696,6 @@ tbody th {
   cursor: not-allowed;
 }
 
-/* Linha do tempo */
 .tl-readout {
   min-height: 64px;
   padding: 8px 10px;
@@ -825,8 +816,7 @@ tbody th {
 .gapband {
   opacity: 0.55;
 }
-/* "Sem registro" é o fundo comum de períodos antigos: mais discreto que
-   lacunas com causa conhecida, para não competir com elas. */
+
 .gapband.cov-unrecorded {
   opacity: 0.3;
 }

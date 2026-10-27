@@ -1,5 +1,4 @@
-// Cliente da API local do agente. Mesma origem: o cookie de sessão vai junto
-// automaticamente e não há CORS.
+
 
 export type CoverageState =
   | "measuring"
@@ -30,7 +29,7 @@ export interface Probe {
   p50Us: number | null;
   p95Us: number | null;
   coverage: number | null;
-  /** Tempo com intervalo ampliado após falhas seguidas. */
+
   backoffMs: number;
   lastStarted: string;
 }
@@ -49,7 +48,7 @@ export interface Status {
 }
 
 export interface Bucket {
-  t: number; // início do balde, ms desde a época
+  t: number;
   n: number;
   ok: number;
   fail?: Record<string, number>;
@@ -232,7 +231,6 @@ export interface ExportOptions {
   includeNotes: boolean;
 }
 
-/** Intervalo pedido à API: relativo a agora ou absoluto. */
 export type RangeQuery = { window: string } | { from: Date; to: Date };
 
 function rangeParams(r: RangeQuery): string {
@@ -241,7 +239,6 @@ function rangeParams(r: RangeQuery): string {
     : `from=${encodeURIComponent(r.from.toISOString())}&to=${encodeURIComponent(r.to.toISOString())}`;
 }
 
-/** Por que uma chamada falhou, do ponto de vista de quem usa o dashboard. */
 export type FailureKind = "unauthenticated" | "offline" | "error";
 
 export class ApiError extends Error {
@@ -275,10 +272,8 @@ async function call<T>(method: "GET" | "POST" | "DELETE", path: string, body?: u
     try {
       const body = (await res.json()) as { error?: string };
       if (body.error) msg = body.error;
-    } catch {
-      // corpo não é JSON: mantém a mensagem genérica
-    }
-    // Proxy de desenvolvimento sem agente atrás devolve 502/504.
+    } catch {}
+
     throw new ApiError(res.status === 502 || res.status === 504 ? "offline" : "error", msg);
   }
   if (res.status === 204) return undefined as T;

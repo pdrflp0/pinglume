@@ -8,11 +8,9 @@ import (
 	"strings"
 )
 
-// Redactor remove ou substitui identificadores antes de qualquer texto entrar
-// na exportação, e conta o que fez para o relatório declarar a redação.
 type Redactor struct {
 	hostname string
-	owner    []string // nome do dono extraído do nome do computador
+	owner    []string
 	ifaces   map[string]string
 	counts   map[string]int
 }
@@ -23,14 +21,11 @@ func NewRedactor(hostname string) *Redactor {
 }
 
 var (
-	// "MacBook-Pro-de-Fulano-Silva", "iMac-do-Fulano", "Mac-mini-da-Fulana"
 	reOwnerPT = regexp.MustCompile(`(?i)^(?:mac(?:book)?(?:-?(?:pro|air))?|imac|mac-?mini|mac-?studio)-(?:de|do|da)-(.+)$`)
-	// "Fulanos-MacBook-Pro", "Fulano-Silvas-iMac"
+
 	reOwnerEN = regexp.MustCompile(`(?i)^(.+?)s?-(?:mac(?:book)?(?:-?(?:pro|air))?|imac|mac-?mini|mac-?studio)(?:-\d+)?$`)
 )
 
-// ownerNames extrai o nome do dono do nome padrão do computador no macOS:
-// o nome inteiro e cada parte com 3+ letras.
 func ownerNames(hostname string) []string {
 	h := strings.TrimSuffix(hostname, ".local")
 	var raw string
@@ -57,15 +52,13 @@ var (
 	reEmail = regexp.MustCompile(`[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}`)
 	reMAC   = regexp.MustCompile(`\b[0-9A-Fa-f]{2}(?:[:\-][0-9A-Fa-f]{2}){5}\b`)
 	reIPv4  = regexp.MustCompile(`\b(?:\d{1,3}\.){3}\d{1,3}\b`)
-	// IPv6: 5+ grupos ou forma abreviada com "::". Horários (21:40:43) têm só
-	// 3 grupos e não podem ser confundidos com endereços.
+
 	reIPv6 = regexp.MustCompile(`\b(?:[0-9A-Fa-f]{1,4}:){4,7}[0-9A-Fa-f]{1,4}\b|\b(?:[0-9A-Fa-f]{1,4}:)+:(?:[0-9A-Fa-f]{1,4}:?)*\b`)
-	// Sequências longas de dígitos (telefone, documento), com separadores comuns.
+
 	reNumber = regexp.MustCompile(`\+?\(?\d[\d\s().\-]{7,}\d`)
 	reIface  = regexp.MustCompile(`\b(?:en|utun|ipsec|ppp|bridge|wg|tun|wlan|eth|awdl|llw)\d+\b`)
 )
 
-// Iface troca o nome da interface por um rótulo estável dentro da exportação.
 func (r *Redactor) Iface(name string) string {
 	if name == "" {
 		return ""
@@ -79,8 +72,6 @@ func (r *Redactor) Iface(name string) string {
 	return l
 }
 
-// Text limpa texto livre ou gerado: nome do dispositivo, e-mails, endereços
-// MAC e IP, números longos e nomes de interface.
 func (r *Redactor) Text(s string) string {
 	if s == "" {
 		return s
@@ -98,7 +89,7 @@ func (r *Redactor) Text(s string) string {
 	s = reIPv6.ReplaceAllStringFunc(s, func(string) string { r.counts["ip"]++; return "[endereço IP]" })
 	s = reIPv4.ReplaceAllStringFunc(s, func(m string) string {
 		if a, err := netip.ParseAddr(m); err == nil && a.IsLoopback() {
-			return m // loopback não identifica ninguém (é o testbed local)
+			return m
 		}
 		r.counts["ip"]++
 		return "[endereço IP]"
@@ -116,7 +107,7 @@ func (r *Redactor) Text(s string) string {
 		r.counts["numero"]++
 		return "[número]"
 	})
-	// Depois de e-mails e endereços, para não quebrar esses padrões.
+
 	for _, name := range r.owner {
 		re := regexp.MustCompile(`(?i)\b` + regexp.QuoteMeta(name) + `\b`)
 		s = re.ReplaceAllStringFunc(s, func(string) string { r.counts["nome"]++; return "[nome]" })
@@ -125,8 +116,6 @@ func (r *Redactor) Text(s string) string {
 	return s
 }
 
-// Target mantém alvos de loopback (testbed) e endpoints Pinglume, e oculta
-// endereços de rede privada, que revelam a rede local.
 func (r *Redactor) Target(t string) string {
 	host := t
 	if i := strings.Index(t, "://"); i >= 0 {
@@ -140,8 +129,6 @@ func (r *Redactor) Target(t string) string {
 	return t
 }
 
-// hostVariants cobre "MacBook-de-Fulano", "MacBook-de-Fulano.local" e o
-// nome com espaços que o macOS mostra na interface.
 func hostVariants(h string) []string {
 	base := strings.TrimSuffix(h, ".local")
 	vs := []string{h, base, strings.ReplaceAll(base, "-", " ")}
@@ -160,7 +147,6 @@ type Redaction struct {
 	Count int    `json:"count"`
 }
 
-// Report descreve as redações aplicadas, inclusive as que não acharam nada.
 func (r *Redactor) Report(notesIncluded bool, notesOmitted int) []Redaction {
 	out := []Redaction{
 		{What: "Nome do dispositivo", How: "não exportado; ocorrências em textos trocadas por [dispositivo]", Count: r.counts["dispositivo"]},

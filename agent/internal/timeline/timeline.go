@@ -1,6 +1,3 @@
-// Package timeline agrega observações em baldes de tempo para o gráfico.
-// Cada série é uma definição de sonda (tipo + versão + parâmetros): sondas de
-// protocolos ou versões diferentes nunca se misturam numa mesma linha.
 package timeline
 
 import (
@@ -13,7 +10,6 @@ import (
 )
 
 type Bucket struct {
-	// T é o início do balde, em ms desde a época (UTC).
 	T     int64          `json:"t"`
 	N     int            `json:"n"`
 	OK    int            `json:"ok"`
@@ -24,18 +20,14 @@ type Bucket struct {
 }
 
 type Series struct {
-	ProbeDefID      string `json:"probeDefId"`
-	Endpoint        string `json:"endpoint"`
-	Kind            string `json:"kind"`
-	ProtocolVersion int    `json:"protocolVersion"`
-	Target          string `json:"target"`
-	IntervalMS      int64  `json:"intervalMs"`
-	// Só baldes com ao menos uma observação. Balde ausente dentro de um
-	// período "measuring" significa apenas que nenhuma sonda começou nele
-	// (balde menor que o intervalo); fora dele, é falta de cobertura.
-	Buckets []Bucket `json:"buckets"`
-	// Backoff são os períodos com intervalo ampliado após falhas seguidas.
-	Backoff []backoff.Span `json:"backoff"`
+	ProbeDefID      string         `json:"probeDefId"`
+	Endpoint        string         `json:"endpoint"`
+	Kind            string         `json:"kind"`
+	ProtocolVersion int            `json:"protocolVersion"`
+	Target          string         `json:"target"`
+	IntervalMS      int64          `json:"intervalMs"`
+	Buckets         []Bucket       `json:"buckets"`
+	Backoff         []backoff.Span `json:"backoff"`
 }
 
 type Interval struct {
@@ -61,8 +53,6 @@ type Timeline struct {
 	Events   []Event    `json:"events"`
 }
 
-// Build agrega [from, to) em aproximadamente n baldes. O tamanho do balde é
-// arredondado para cima em segundos inteiros para que os limites sejam legíveis.
 func Build(ctx context.Context, st *store.Store, from, to time.Time, n int, liveUntil time.Time) (Timeline, error) {
 	bucket := max(time.Second, to.Sub(from)/time.Duration(n)).Round(time.Second)
 	if bucket*time.Duration(n) < to.Sub(from) {

@@ -10,7 +10,6 @@ export const stateLabel: Record<CoverageState, string> = {
   unrecorded: "Sem registro",
 };
 
-/** Ordem fixa na barra e na legenda: medição primeiro, lacunas depois. */
 export const stateOrder: CoverageState[] = [
   "measuring",
   "paused",
@@ -40,7 +39,6 @@ export function duration(ms: number): string {
   return m % 60 ? `${h} h ${m % 60} min` : `${h} h`;
 }
 
-/** Latência em µs, com sinal (diferenças podem ser negativas) e vírgula decimal. */
 export function latency(us: number | null): string {
   if (us === null) return "—";
   const a = Math.abs(us);
@@ -59,7 +57,6 @@ export function clock(iso: string): string {
   return timeFmt.format(new Date(iso));
 }
 
-/** O que a latência de cada tipo de sonda mede. */
 export const kindMeasure: Record<string, string> = {
   tcp: "handshake TCP",
   dns: "resolução de nome único",
@@ -107,7 +104,6 @@ const dayTimeFmt = new Intl.DateTimeFormat("pt-BR", {
   second: "2-digit",
 });
 
-/** Fim de um período: só o horário no mesmo dia; com a data quando o dia muda. */
 export function until(start: string | number, end: string | number): string {
   const a = new Date(start);
   const b = new Date(end);
