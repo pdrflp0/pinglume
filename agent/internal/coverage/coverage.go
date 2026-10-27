@@ -1,6 +1,3 @@
-// Package coverage mantém os intervalos que dizem se o agente estava medindo.
-// Ausência de medição nunca vira "internet ok" nem "queda": vira um intervalo
-// com estado e motivo explícitos.
 package coverage
 
 import (
@@ -13,10 +10,11 @@ import (
 )
 
 const (
-	Measuring = "measuring"
-	Paused    = "paused"
-	Suspended = "suspended"
-	AgentDown = "agent_down"
+	Measuring        = "measuring"
+	Paused           = "paused"
+	Suspended        = "suspended"
+	AgentDown        = "agent_down"
+	ProbeUnavailable = "probe_unavailable"
 )
 
 type Tracker struct {
@@ -24,22 +22,19 @@ type Tracker struct {
 	Clock     clock.Clock
 	DeviceID  string
 	Heartbeat time.Duration
-
-	state    string
-	prevWall time.Time
-	prevMono time.Duration
+	state     string
+	prevWall  time.Time
+	prevMono  time.Duration
 }
 
-// Detection descreve uma lacuna ou anomalia encontrada; serve para log e testes.
 type Detection struct {
-	Kind     string // agent_down | suspended | clock_jump
+	Kind     string
 	Interval store.Interval
 	Detail   string
 }
 
 func (t *Tracker) State() string { return t.state }
 
-// Start abre a cobertura desta execução e registra a lacuna desde a anterior.
 func (t *Tracker) Start(ctx context.Context, initial string) ([]Detection, error) {
 	now := t.Clock.Now()
 	var dets []Detection
@@ -53,9 +48,6 @@ func (t *Tracker) Start(ctx context.Context, initial string) ([]Detection, error
 	var hasLast bool
 	reason, detectedBy := "agente não estava em execução", "startup_gap"
 	if open != nil {
-		// Intervalo ainda aberto: a execução anterior morreu sem encerrar. A
-		// última evidência de vida é o heartbeat ou a última observação gravada
-		// depois dele, o que for mais recente.
 		lastAlive, hasLast = open.End, true
 		if obsAt, ok, err := t.Store.LastObservationAt(ctx, t.DeviceID); err != nil {
 			return nil, err
@@ -93,12 +85,6 @@ func (t *Tracker) Start(ctx context.Context, initial string) ([]Detection, error
 	return dets, nil
 }
 
-// Tick é chamado a cada heartbeat. Compara quanto andaram o relógio civil e o
-// monotônico desde o último tick:
-//   - civil andou bem mais que o monotônico: o Mac dormiu (ou o relógio foi
-//     adiantado — esta heurística não distingue os dois, e o motivo diz isso);
-//   - civil andou para trás: ajuste de relógio, registrado como evento;
-//   - monotônico andou muito mais que o heartbeat: o agente ficou sem executar.
 func (t *Tracker) Tick(ctx context.Context) ([]Detection, error) {
 	wall, mono := t.Clock.Now(), t.Clock.Mono()
 	dw, dm := wall.Sub(t.prevWall), mono-t.prevMono
@@ -119,7 +105,7 @@ func (t *Tracker) Tick(ctx context.Context) ([]Detection, error) {
 	case skew < -threshold:
 		detail := fmt.Sprintf("relógio civil voltou %s", (-skew).Round(time.Second))
 		t.Store.InsertSystemEvent(ctx, wall, "clock_jump", detail)
-		// Fecha no último instante conhecido e reabre no novo tempo civil.
+
 		_, err := t.Store.Transition(ctx, t.DeviceID, t.prevWall, nil,
 			&store.Interval{Start: wall, State: t.state, Reason: detail, DetectedBy: "wall_mono_skew"})
 		return []Detection{{Kind: "clock_jump", Detail: detail}}, err
@@ -135,7 +121,6 @@ func (t *Tracker) Tick(ctx context.Context) ([]Detection, error) {
 	return []Detection{det}, err
 }
 
-// SetState registra uma mudança pedida (ex.: pausa do usuário).
 func (t *Tracker) SetState(ctx context.Context, state, reason string) error {
 	if state == t.state {
 		return nil
@@ -149,8 +134,18 @@ func (t *Tracker) SetState(ctx context.Context, state, reason string) error {
 	return nil
 }
 
-// Stop fecha a cobertura num encerramento normal.
 func (t *Tracker) Stop(ctx context.Context) error {
 	_, err := t.Store.Transition(ctx, t.DeviceID, t.Clock.Now(), nil, nil)
 	return err
+}
+
+func (t *Tracker) Recover(ctx context.Context, from time.Time, reason string) error {
+	now := t.Clock.Now()
+	iv := store.Interval{Start: from, End: now, State: ProbeUnavailable, Reason: reason, DetectedBy: "write_error"}
+	if _, err := t.Store.Transition(ctx, t.DeviceID, from, []store.Interval{iv},
+		&store.Interval{Start: now, State: Measuring, DetectedBy: "agent"}); err != nil {
+		return err
+	}
+	t.state, t.prevWall, t.prevMono = Measuring, now, t.Clock.Mono()
+	return nil
 }

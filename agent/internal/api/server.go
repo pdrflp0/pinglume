@@ -1,12 +1,3 @@
-// Package api expõe o agente em loopback para a CLI e o dashboard.
-//
-// Defesas, nesta ordem:
-//  1. escuta só em 127.0.0.1;
-//  2. Host precisa ser o próprio endereço de loopback (contra DNS rebinding);
-//  3. pedidos de outro site (Sec-Fetch-Site/Origin) são recusados;
-//  4. toda rota /api exige token (CLI) ou sessão de navegador;
-//  5. nenhum cabeçalho CORS é emitido;
-//  6. nenhuma rota executa comandos, muda a rede ou aceita alvo de sonda.
 package api
 
 import (
@@ -22,6 +13,8 @@ import (
 	"time"
 
 	"pinglume/agent/internal/netctx"
+	"pinglume/agent/internal/retention"
+	"pinglume/agent/internal/storage"
 	"pinglume/agent/internal/store"
 	"pinglume/agent/internal/summary"
 	"pinglume/agent/internal/timeline"
@@ -29,7 +22,6 @@ import (
 
 const sessionCookie = "pinglume_session"
 
-// Controller é o que a API precisa do agente em execução.
 type Controller interface {
 	State() string
 	SetPaused(ctx context.Context, paused bool) error
@@ -37,17 +29,16 @@ type Controller interface {
 }
 
 type Server struct {
-	Store   *store.Store
-	Ctl     Controller
-	Token   string
-	Port    int
-	Version string
-	Static  fs.FS // build do dashboard; pode estar vazio
-	// DeviceID identifica esta instalação nos relatos gravados.
-	DeviceID string
-	Now      func() time.Time
-
-	sess *sessions
+	Store     *store.Store
+	Ctl       Controller
+	Token     string
+	Port      int
+	Version   string
+	Static    fs.FS
+	DeviceID  string
+	Retention retention.Policy
+	Now       func() time.Time
+	sess      *sessions
 }
 
 func (s *Server) Handler() http.Handler {
@@ -66,6 +57,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/v1/incidents", s.require(anyAuth, s.handleCreateIncident))
 	mux.Handle("GET /api/v1/incidents/{id}", s.require(anyAuth, s.handleGetIncident))
 	mux.Handle("DELETE /api/v1/incidents/{id}", s.require(anyAuth, s.handleDeleteIncident))
+	mux.Handle("GET /api/v1/storage", s.require(anyAuth, s.handleStorage))
 	mux.Handle("GET /api/v1/network", s.require(anyAuth, s.handleNetwork))
 	mux.Handle("GET /api/v1/experiments", s.require(anyAuth, s.handleListExperiments))
 	mux.Handle("POST /api/v1/experiments", s.require(anyAuth, s.handleCreateExperiment))
@@ -85,7 +77,6 @@ func (s *Server) Handler() http.Handler {
 	return s.securityHeaders(s.hostCheck(mux))
 }
 
-// Listen abre o socket somente em loopback.
 func (s *Server) Listen() (net.Listener, error) {
 	return net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(s.Port)))
 }
@@ -133,12 +124,10 @@ const (
 	anyAuth
 )
 
-// require aplica autenticação e a política de origem a uma rota da API.
 func (s *Server) require(mode authMode, h http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		self := "http://" + r.Host
-		// Navegadores modernos dizem de onde vem o pedido. Qualquer coisa
-		// que não seja a própria origem é recusada, inclusive leituras.
+
 		if site := r.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" {
 			writeError(w, http.StatusForbidden, "pedido de outra origem")
 			return
@@ -167,7 +156,7 @@ func (s *Server) require(mode authMode, h http.HandlerFunc) http.Handler {
 				writeError(w, http.StatusUnauthorized, "sessão ausente ou expirada; rode `pinglume open`")
 				return
 			}
-			// Mudança de estado por cookie exige Origin explícito igual ao nosso.
+
 			if r.Method != http.MethodGet && r.Method != http.MethodHead && origin != self {
 				writeError(w, http.StatusForbidden, "origem ausente")
 				return
@@ -181,8 +170,6 @@ func (s *Server) handleNewCode(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"code": s.sess.newCode(), "expiresInSeconds": int(s.sess.codeTTL.Seconds())})
 }
 
-// handleAuth troca o código de uso único por cookie e redireciona para "/",
-// tirando o código da barra de endereço e do histórico.
 func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
 	id, ok := s.sess.redeem(r.URL.Query().Get("code"))
 	if !ok {
@@ -224,8 +211,6 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, statusResponse{AgentVersion: s.Version, State: s.Ctl.State(), Now: s.Now(), Summary: sum})
 }
 
-// parseRange lê window=<duração> (relativo a agora) ou from/to (RFC 3339).
-// O fim nunca passa de agora: o futuro não tem medição nem lacuna.
 func (s *Server) parseRange(w http.ResponseWriter, r *http.Request, def, minSpan time.Duration) (time.Time, time.Time, bool) {
 	q := r.URL.Query()
 	now := s.Now()
@@ -261,7 +246,6 @@ func (s *Server) parseRange(w http.ResponseWriter, r *http.Request, def, minSpan
 	return from, to, true
 }
 
-// handleTimeline devolve a série agregada do intervalo pedido (padrão: 15 min).
 func (s *Server) handleTimeline(w http.ResponseWriter, r *http.Request) {
 	from, to, ok := s.parseRange(w, r, 15*time.Minute, 10*time.Second)
 	if !ok {
@@ -299,8 +283,6 @@ func (s *Server) handlePause(pause bool) http.HandlerFunc {
 	}
 }
 
-// staticHandler serve o dashboard; caminhos sem arquivo caem no index.html
-// (roteamento no cliente).
 func (s *Server) staticHandler() http.Handler {
 	files := http.FileServer(http.FS(s.Static))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -338,4 +320,13 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
+}
+
+func (s *Server) handleStorage(w http.ResponseWriter, r *http.Request) {
+	info, err := storage.Load(r.Context(), s.Store, s.Retention, s.Now())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "falha ao ler o armazenamento")
+		return
+	}
+	writeJSON(w, http.StatusOK, info)
 }

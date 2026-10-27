@@ -3,7 +3,6 @@ import { api, type ExportMeta } from "./api";
 import { clock } from "./format";
 import { rangeLabel } from "./scale";
 
-/** Exportação: prévia do arquivo real (iframe isolado), opções e download. */
 export function ExportCard({ from, to }: { from: number; to: number }) {
   const [incidents, setIncidents] = useState(true);
   const [comparisons, setComparisons] = useState(true);

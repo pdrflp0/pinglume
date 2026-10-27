@@ -6,13 +6,25 @@ import {
   type FailureKind,
   type IncidentListItem,
   type Status,
+  type StorageInfo,
   type Timeline as TimelineData,
 } from "./api";
 import { ComparisonCard } from "./Comparison";
 import { DataTable } from "./DataTable";
 import { ExportCard } from "./Export";
 import { IncidentsCard, ReportDialog } from "./Incidents";
-import { clock, duration, failureLabel, kindMeasure, latency, percent, stateLabel, stateOrder, until } from "./format";
+import {
+  clock,
+  duration,
+  failureLabel,
+  kindMeasure,
+  latency,
+  megabytes,
+  percent,
+  stateLabel,
+  stateOrder,
+  until,
+} from "./format";
 import { pan, PRESETS, resolve, select, toQuery, zoom, type ViewRange } from "./range";
 import { rangeLabel } from "./scale";
 import { Timeline } from "./Timeline";
@@ -48,7 +60,7 @@ function useDashboard(range: ViewRange) {
       setLoad({ status, timeline, incidents, failure: null, loading: false });
     } catch (e) {
       const err = e instanceof ApiError ? e : new ApiError("error", String(e));
-      // Mantém a última leitura boa e o instante da primeira falha.
+
       setLoad((prev) => ({
         ...prev,
         failure: { kind: err.kind, message: err.message, since: prev.failure?.since ?? new Date() },
@@ -72,10 +84,16 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [reporting, setReporting] = useState(false);
   const [selectedIncident, setSelectedIncident] = useState<string | null>(null);
+  const [storage, setStorage] = useState<StorageInfo | null>(null);
+  useEffect(() => {
+    const load = () => api.storage().then(setStorage).catch(() => {});
+    load();
+    const t = setInterval(load, 60_000);
+    return () => clearInterval(t);
+  }, []);
   const [announcement, setAnnouncement] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
 
-  // Anuncia mudanças de estado do agente para leitores de tela.
   const lastState = useRef<CoverageState | null>(null);
   useEffect(() => {
     if (data && lastState.current && lastState.current !== data.state) {
@@ -216,6 +234,14 @@ export function App() {
 
       <footer className="foot muted">
         Agente {data.agentVersion} · atualiza a cada {POLL_MS / 1000} s · dados somente neste computador
+        {storage && (
+          <>
+            {" "}
+            · banco {megabytes(storage.usage.usedBytes)}
+            {storage.limitBytes > 0 && <> de {megabytes(storage.limitBytes)}</>} · medições brutas guardadas por{" "}
+            {duration(storage.rawRetentionMs)}, agregados por {duration(storage.aggregateRetentionMs)}
+          </>
+        )}
       </footer>
     </div>
   );
@@ -241,7 +267,6 @@ interface RangeBarProps {
   onPan: (fraction: number) => void;
 }
 
-/** Controles do período, numa linha acima de tudo que ele afeta. */
 function RangeBar({ range, label, onChange, onZoom, onPan }: RangeBarProps) {
   return (
     <div className="rangebar" role="toolbar" aria-label="Período exibido">
@@ -403,8 +428,14 @@ function ProbeTable({ probes }: { probes: Status["summary"]["probes"] }) {
                       </ul>
                     )}
                   </td>
-                  <td className="r num">{latency(p.p50Us)}</td>
-                  <td className="r num">{latency(p.p95Us)}</td>
+                  <td className="r num">
+                    {latency(p.p50Us)}
+                    {p.approximate && <div className="muted small">aprox.</div>}
+                  </td>
+                  <td className="r num">
+                    {latency(p.p95Us)}
+                    {p.approximate && <div className="muted small">aprox.</div>}
+                  </td>
                   <td className="r num">{clock(p.lastStarted)}</td>
                 </tr>
               );
@@ -415,7 +446,8 @@ function ProbeTable({ probes }: { probes: Status["summary"]["probes"] }) {
       <p className="muted small">
         Cobertura: execuções concluídas ÷ esperadas enquanto o agente media. Backoff: depois de falhas seguidas, o
         agente amplia o intervalo para não insistir no endpoint, e a cobertura cai de propósito. P50/P95: só execuções
-        bem-sucedidas. Falhas são rotuladas pelo protocolo da sonda; não são perda de pacotes IP.
+        bem-sucedidas; "aprox." quando o período inclui dados antigos já compactados em agregados por minuto (as contagens
+        continuam exatas). Falhas são rotuladas pelo protocolo da sonda; não são perda de pacotes IP.
       </p>
     </>
   );

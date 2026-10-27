@@ -1,6 +1,3 @@
-// Package probe executa medições pequenas e as classifica por protocolo.
-// Um status descreve o que aconteceu naquele protocolo; ele nunca afirma
-// perda de pacotes IP nem "internet fora do ar".
 package probe
 
 import (
@@ -13,12 +10,10 @@ import (
 )
 
 type Result struct {
-	Duration    time.Duration // monotônico
+	Duration    time.Duration
 	Status      string
 	ErrorDetail string
-	// Phases guarda tempos parciais em µs desde o início (ex.: "connect",
-	// "tls", "ttfb"); vazio quando a sonda não tem fases.
-	Phases map[string]int64
+	Phases      map[string]int64
 }
 
 type Prober interface {
@@ -27,8 +22,6 @@ type Prober interface {
 	Probe(ctx context.Context) Result
 }
 
-// TCPConnect mede o tempo do handshake TCP até um endereço IP:porta e fecha a
-// conexão em seguida. O alvo deve ser IP literal para não misturar DNS na medida.
 type TCPConnect struct {
 	Addr    string
 	Timeout time.Duration
@@ -51,8 +44,6 @@ func (p TCPConnect) Probe(ctx context.Context) Result {
 	return Result{Duration: elapsed, Status: "ok"}
 }
 
-// Classify traduz um erro de rede em status. A ordem importa: o cancelamento
-// pelo agente (pausa, desligamento) não pode virar timeout de rede.
 func Classify(ctx context.Context, err error) string {
 	if errors.Is(ctx.Err(), context.Canceled) || errors.Is(err, context.Canceled) {
 		return "cancelled"

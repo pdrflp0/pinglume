@@ -1,5 +1,3 @@
--- Comparação guiada: duas janelas (antes e depois de uma mudança) medidas
--- com as mesmas sondas, comparadas pela regra compare-v1.
 CREATE TABLE experiments (
     id                TEXT PRIMARY KEY,
     device_id         TEXT NOT NULL REFERENCES devices (id),
@@ -16,12 +14,10 @@ CREATE TABLE experiment_windows (
     role            TEXT NOT NULL CHECK (role IN ('baseline', 'intervention')),
     start_ms        INTEGER NOT NULL,
     planned_end_ms  INTEGER NOT NULL,
-    -- fim real: igual ao planejado, ou antes se o experimento foi cancelado
     end_ms          INTEGER,
     UNIQUE (experiment_id, role)
 );
 
--- Condições de cada janela. A origem fica sempre explícita.
 CREATE TABLE conditions (
     id         TEXT PRIMARY KEY,
     window_id  TEXT NOT NULL REFERENCES experiment_windows (id) ON DELETE CASCADE,

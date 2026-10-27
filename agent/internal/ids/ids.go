@@ -1,5 +1,3 @@
-// Package ids gera ULIDs: ordenáveis por tempo e criados localmente, para que
-// a sincronização futura não dependa do servidor para atribuir identidade.
 package ids
 
 import (

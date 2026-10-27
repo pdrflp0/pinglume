@@ -20,10 +20,10 @@ func TestSpans(t *testing.T) {
 	ev := func(at time.Duration, kind, id string, m int) {
 		st.InsertSystemEvent(ctx, t0.Add(at), kind, `{"probeDefId":"`+id+`","multiplier":`+string(rune('0'+m))+`}`)
 	}
-	ev(-10*time.Minute, "probe_backoff", "a", 2) // começou antes do período
+	ev(-10*time.Minute, "probe_backoff", "a", 2)
 	ev(-5*time.Minute, "probe_backoff", "a", 4)
 	ev(2*time.Minute, "probe_backoff_end", "a", 1)
-	ev(5*time.Minute, "probe_backoff", "b", 2) // sem fim: vai até "to"
+	ev(5*time.Minute, "probe_backoff", "b", 2)
 	ev(6*time.Minute, "probe_backoff_end", "c", 1)
 
 	spans, err := Spans(ctx, st, t0, t0.Add(10*time.Minute))

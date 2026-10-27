@@ -47,7 +47,7 @@ test("segmentos de cobertura preenchem buracos com 'sem registro'", () => {
     to,
   );
   expect(segs.map((s) => s.state)).toEqual(["measuring", "unrecorded", "paused", "unrecorded"]);
-  expect(segs[0].start).toBe(from); // recortado ao período
+  expect(segs[0].start).toBe(from);
   expect(segs.at(-1)!.end).toBe(to);
 });
 

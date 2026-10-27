@@ -13,8 +13,6 @@ import (
 	"golang.org/x/net/route"
 )
 
-// System detecta a interface pela rota padrão (tabela de roteamento do
-// kernel) e o tipo pela lista de portas do `networksetup`, guardada em cache.
 type System struct {
 	mu      sync.Mutex
 	ports   map[string]string
@@ -46,8 +44,6 @@ func (s *System) portFor(ctx context.Context, iface string) string {
 	return s.ports[iface]
 }
 
-// defaultRouteInterface lê a tabela de rotas IPv4 e devolve a interface da
-// rota padrão (destino 0.0.0.0/0).
 func defaultRouteInterface() string {
 	rib, err := route.FetchRIB(syscall.AF_INET, route.RIBTypeRoute, 0)
 	if err != nil {

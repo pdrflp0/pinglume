@@ -32,8 +32,6 @@ func total(t *testing.T, st *store.Store, since time.Time) int {
 	return n
 }
 
-// Pausa interrompe novas medições em ≤ 1 s, persiste entre reinícios e a
-// retomada volta a medir.
 func TestPauseStopsMeasuringAndSurvivesRestart(t *testing.T) {
 	ctx := context.Background()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -116,7 +114,6 @@ func TestPauseStopsMeasuringAndSurvivesRestart(t *testing.T) {
 		t.Fatalf("%d medições começaram durante a pausa", n)
 	}
 
-	// Reinício com a pausa ativa: continua pausado.
 	cancel()
 	if err := <-done; err != nil {
 		t.Fatal(err)
@@ -205,5 +202,84 @@ func TestNetChangeEvents(t *testing.T) {
 	}
 	if r.NetContext().Kind != netctx.KindEthernet {
 		t.Fatalf("contexto atual: %+v", r.NetContext())
+	}
+}
+
+func TestDiskFullSuspendsAndRecovers(t *testing.T) {
+	ctx := context.Background()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			c.Close()
+		}
+	}()
+	st, err := store.Open(ctx, filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	clk := clock.System{}
+	dev, _ := st.EnsureDevice(ctx, store.Device{Name: "t", AgentVersion: "t"}, clk.Now())
+	p := probe.TCPConnect{Addr: ln.Addr().String(), Timeout: 200 * time.Millisecond}
+	def, _ := st.EnsureProbeDefinition(ctx, store.Endpoint{Label: "ep", Host: "127.0.0.1", Owner: "dev"},
+		store.ProbeDefinition{Kind: "tcp", Target: p.Addr, Interval: 5 * time.Millisecond, Timeout: p.Timeout, ProtocolVersion: 1}, clk.Now())
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	states := make(chan string, 16)
+	r := &Runner{
+		Store:     st,
+		Tracker:   &coverage.Tracker{Store: st, Clock: clk, DeviceID: dev.ID, Heartbeat: 40 * time.Millisecond},
+		Scheduler: &sched.Scheduler{Store: st, Clock: clk, DeviceID: dev.ID, Concurrency: 1, Log: log},
+		Jobs:      []sched.Job{{Def: def, Prober: p}},
+		Log:       log,
+		Control:   make(chan Command),
+		OnState:   func(s string) { states <- s },
+	}
+	runCtx, cancel := context.WithCancel(ctx)
+	done := make(chan error, 1)
+	go func() { done <- r.Run(runCtx) }()
+	<-states
+	time.Sleep(100 * time.Millisecond)
+
+	u, _ := st.Usage(ctx)
+	st.SetMaxPages(ctx, u.FileBytes/4096)
+	waitFor := func(want string) {
+		t.Helper()
+		for {
+			select {
+			case s := <-states:
+				if s == want {
+					return
+				}
+			case <-time.After(3 * time.Second):
+				t.Fatalf("estado %s não chegou", want)
+			}
+		}
+	}
+	waitFor(coverage.ProbeUnavailable)
+	if r.State() != coverage.ProbeUnavailable {
+		t.Fatalf("estado público deveria indicar sonda indisponível: %s", r.State())
+	}
+	st.SetMaxPages(ctx, 1<<30)
+	waitFor(coverage.Measuring)
+	cancel()
+	<-done
+
+	ivs, _ := st.Intervals(ctx, time.Now().Add(-time.Minute), time.Now().Add(time.Minute))
+	found := false
+	for _, iv := range ivs {
+		if iv.State == coverage.ProbeUnavailable && strings.Contains(iv.Reason, "disco cheio") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("período sem medição por disco cheio não registrado: %+v", ivs)
 	}
 }

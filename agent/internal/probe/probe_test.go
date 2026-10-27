@@ -31,14 +31,13 @@ func TestTCPConnectOK(t *testing.T) {
 func TestTCPConnectRefused(t *testing.T) {
 	ln, _ := net.Listen("tcp", "127.0.0.1:0")
 	addr := ln.Addr().String()
-	ln.Close() // porta agora fechada
+	ln.Close()
 	r := TCPConnect{Addr: addr, Timeout: time.Second}.Probe(context.Background())
 	if r.Status != "refused" {
 		t.Fatalf("esperava refused, veio %+v", r)
 	}
 }
 
-// Cancelamento pelo agente (pausa, Ctrl+C) não pode ser contado como timeout de rede.
 func TestCancelIsNotTimeout(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

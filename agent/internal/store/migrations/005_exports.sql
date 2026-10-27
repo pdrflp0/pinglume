@@ -1,5 +1,3 @@
--- Snapshot de exportação: gerado uma vez e nunca alterado. O hash permite
--- conferir que um arquivo compartilhado é exatamente o que foi gerado.
 CREATE TABLE export_snapshots (
     id              TEXT PRIMARY KEY,
     created_at_ms   INTEGER NOT NULL,
@@ -8,7 +6,7 @@ CREATE TABLE export_snapshots (
     options_json    TEXT NOT NULL,
     schema_version  TEXT NOT NULL,
     agent_version   TEXT NOT NULL,
-    sha256          TEXT NOT NULL,   -- do corpo JSON
+    sha256          TEXT NOT NULL,
     body_json       TEXT NOT NULL,
     body_html       TEXT NOT NULL
 );

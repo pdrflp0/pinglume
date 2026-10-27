@@ -9,14 +9,6 @@ import (
 	"time"
 )
 
-// DNSResolve mede o tempo de resolver um nome único dentro da zona Pinglume.
-// O nome muda a cada execução (<nonce>.<zona>) para que nenhum cache responda
-// no lugar do servidor autoritativo.
-//
-// Resolver vazio usa o resolvedor do sistema — é o que interessa em produção,
-// porque é o caminho que os aplicativos da pessoa usam. Um endereço explícito
-// (ip:porta) só serve para o testbed local, e a definição da sonda registra
-// isso para que as duas medidas nunca sejam comparadas como se fossem iguais.
 type DNSResolve struct {
 	Zone     string
 	Resolver string
@@ -62,7 +54,7 @@ func classifyDNS(ctx context.Context, err error) string {
 		if de.IsTimeout || errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			return "timeout"
 		}
-		return "dns_error" // NXDOMAIN, SERVFAIL, REFUSED…: o detalhe guarda qual
+		return "dns_error"
 	}
 	return Classify(ctx, err)
 }

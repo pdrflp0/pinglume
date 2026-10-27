@@ -11,8 +11,6 @@ import (
 	"pinglume/agent/internal/store"
 )
 
-// exportCSP vale para o HTML exportado servido pelo agente: sem scripts, sem
-// rede; só o CSS embutido. frame-ancestors 'self' permite a prévia em iframe.
 const exportCSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'self'; base-uri 'none'; form-action 'none'"
 
 func validRange(from, to, now time.Time) (time.Time, error) {

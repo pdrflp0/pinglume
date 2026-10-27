@@ -15,7 +15,6 @@ import (
 	"pinglume/agent/internal/store"
 )
 
-// expMu serializa criação e avanço de comparações: só uma pode estar ativa.
 var expMu sync.Mutex
 
 type experimentView struct {
@@ -39,7 +38,6 @@ func cleanText(v string, max int) (string, bool) {
 	return v, utf8.RuneCountInString(v) <= max
 }
 
-// conditionsFor junta a condição declarada e a detectada agora.
 func (s *Server) conditionsFor(declared string) []store.Condition {
 	conds := []store.Condition{}
 	if declared != "" {

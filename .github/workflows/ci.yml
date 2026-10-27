@@ -15,7 +15,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # macOS é a plataforma de referência; Linux garante que nada depende só dela.
         os: [macos-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:

@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	version     = "0.3.0"
+	version     = "0.4.0"
 	defaultPort = 47821
 )
 
@@ -32,6 +32,8 @@ func main() {
 		err = cmdMark(os.Args[2:])
 	case "incidents":
 		err = cmdIncidents(os.Args[2:])
+	case "storage":
+		err = cmdStorage(os.Args[2:])
 	case "export":
 		err = cmdExport(os.Args[2:])
 	case "pause":
@@ -59,13 +61,13 @@ comandos:
   status   resume medições e cobertura recentes (lê o banco; funciona com o agente parado)
   mark       registra "travou agora" (um relato, não uma medição)
   incidents  lista os relatos e a análise de cada um
+  storage    mostra uso do banco, retenção e manutenções recentes
   export     gera relatório HTML/JSON redigido (--html, --json)
   pause    pausa novas medições do agente em execução
   resume   retoma as medições
   version  mostra a versão`)
 }
 
-// common são as opções compartilhadas por todos os comandos.
 type common struct {
 	dataDir string
 	port    int
@@ -79,7 +81,7 @@ func (c *common) register(fs *flag.FlagSet) {
 func (c *common) tokenPath() string { return filepath.Join(c.dataDir, "api-token") }
 
 func defaultDataDir() string {
-	base, err := os.UserConfigDir() // macOS: ~/Library/Application Support
+	base, err := os.UserConfigDir()
 	if err != nil {
 		return ".pinglume"
 	}

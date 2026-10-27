@@ -21,15 +21,13 @@ import (
 	"pinglume/agent/internal/coverage"
 	"pinglume/agent/internal/lock"
 	"pinglume/agent/internal/netctx"
+	"pinglume/agent/internal/retention"
 	"pinglume/agent/internal/runner"
 	"pinglume/agent/internal/sched"
 	"pinglume/agent/internal/store"
 	"pinglume/agent/internal/webui"
 )
 
-// devTargets coleta --dev-target label=ip:porta. Enquanto os endpoints
-// próprios não estão hospedados, o agente só mede alvos de desenvolvimento em
-// loopback ou rede privada: nada de medir serviços de terceiros.
 type devTargets []devTarget
 
 type devTarget struct {
@@ -55,7 +53,6 @@ func (d *devTargets) Set(v string) error {
 	return nil
 }
 
-// controller liga a API ao runner pelo canal de comandos.
 type controller struct {
 	r   *runner.Runner
 	ctl chan runner.Command
@@ -95,6 +92,10 @@ func cmdRun(args []string) error {
 	fs.StringVar(&cfg.serverName, "dev-server-name", "probe.pinglume.test", "nome verificado no certificado do testbed")
 	fs.StringVar(&cfg.zone, "dev-zone", "p.pinglume.test", "zona DNS do testbed")
 	concurrency := fs.Int("concurrency", 2, "sondas simultâneas no máximo")
+	pol := retention.DefaultPolicy()
+	fs.DurationVar(&pol.Raw, "retention", pol.Raw, "por quanto tempo guardar as medições brutas")
+	fs.DurationVar(&pol.Aggregates, "aggregate-retention", pol.Aggregates, "por quanto tempo guardar os agregados por minuto")
+	limitMB := fs.Int64("disk-limit-mb", pol.LimitBytes>>20, "limite de espaço do banco em MB (0 desativa)")
 	fs.Var(&cfg.targets, "dev-target", "alvo TCP/HTTPS de desenvolvimento label=ip:porta (repetível)")
 	fs.Var(&cfg.resolvers, "dev-dns", "servidor DNS de desenvolvimento label=ip:porta (repetível)")
 	fs.Parse(args)
@@ -105,6 +106,10 @@ func cmdRun(args []string) error {
 	}
 	if err := cfg.validate(); err != nil {
 		return err
+	}
+	pol.LimitBytes = *limitMB << 20
+	if pol.Raw < time.Hour || pol.Aggregates < pol.Raw || *limitMB < 0 {
+		return errors.New("retention ≥ 1h, aggregate-retention ≥ retention e disk-limit-mb ≥ 0")
 	}
 
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
@@ -147,17 +152,18 @@ func cmdRun(args []string) error {
 
 	ctl := make(chan runner.Command)
 	r := &runner.Runner{
-		Store:     st,
-		Tracker:   &coverage.Tracker{Store: st, Clock: clk, DeviceID: dev.ID, Heartbeat: 5 * time.Second},
-		Scheduler: &sched.Scheduler{Store: st, Clock: clk, DeviceID: dev.ID, Concurrency: *concurrency, Jitter: 0.1, Log: log},
-		Jobs:      jobs,
-		Log:       log,
-		Control:   ctl,
-		Net:       &netctx.System{},
+		Store:      st,
+		Tracker:    &coverage.Tracker{Store: st, Clock: clk, DeviceID: dev.ID, Heartbeat: 5 * time.Second},
+		Scheduler:  &sched.Scheduler{Store: st, Clock: clk, DeviceID: dev.ID, Concurrency: *concurrency, Jitter: 0.1, Log: log},
+		Jobs:       jobs,
+		Log:        log,
+		Control:    ctl,
+		Net:        &netctx.System{},
+		Maintainer: &retention.Maintainer{Store: st, Clock: clk, Policy: pol, Log: log},
 	}
 
 	srv := &api.Server{Store: st, Ctl: controller{r: r, ctl: ctl}, Token: token, Port: c.port,
-		Version: version, Static: webui.FS(), DeviceID: dev.ID}
+		Version: version, Static: webui.FS(), DeviceID: dev.ID, Retention: pol}
 	ln, err := srv.Listen()
 	if err != nil {
 		return fmt.Errorf("API local na porta %d: %w", c.port, err)

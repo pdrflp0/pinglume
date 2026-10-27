@@ -16,9 +16,6 @@ import (
 	"time"
 )
 
-// loadOrCreateCert carrega o certificado do testbed ou cria um autoassinado
-// para serverName e 127.0.0.1. Ele é persistido para que o agente, que fixa
-// esse certificado como raiz (--dev-ca), continue confiando após reinícios.
 func loadOrCreateCert(dir, serverName string) (tls.Certificate, string, error) {
 	certPath := filepath.Join(dir, "probe-server.pem")
 	keyPath := filepath.Join(dir, "probe-server-key.pem")
@@ -45,7 +42,7 @@ func loadOrCreateCert(dir, serverName string) (tls.Certificate, string, error) {
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: true,
-		IsCA:                  true, // é a própria raiz que o agente fixa
+		IsCA:                  true,
 	}
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
 	if err != nil {

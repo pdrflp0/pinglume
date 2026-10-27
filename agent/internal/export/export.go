@@ -1,9 +1,3 @@
-// Package export gera o pacote compartilhável: JSON com schema versionado e
-// HTML autocontido, os dois a partir do mesmo snapshot redigido.
-//
-// O que nunca sai: nome do dispositivo, detalhes de erro das sondas, caminhos
-// de arquivo, token. O que sai só com pedido explícito: observações dos
-// relatos. Todo texto passa pelo Redactor antes de entrar no snapshot.
 package export
 
 import (
@@ -50,7 +44,7 @@ type ProbeDoc struct {
 type IncidentDoc struct {
 	ReportedAt time.Time         `json:"reportedAt"`
 	Symptom    string            `json:"symptom"`
-	Note       *string           `json:"note"` // null quando omitida
+	Note       *string           `json:"note"`
 	Analysis   incident.Analysis `json:"analysis"`
 }
 
@@ -78,8 +72,7 @@ type Snapshot struct {
 		From time.Time `json:"from"`
 		To   time.Time `json:"to"`
 	} `json:"period"`
-	Notice []string `json:"notice"`
-	// Included diz quais seções opcionais foram pedidas.
+	Notice   []string `json:"notice"`
 	Included struct {
 		Incidents   bool `json:"incidents"`
 		Comparisons bool `json:"comparisons"`
@@ -125,7 +118,6 @@ func method() Method {
 	}
 }
 
-// Build monta o snapshot redigido. Não grava nada.
 func Build(ctx context.Context, st *store.Store, opt Options, agentVersion string, now time.Time) (Snapshot, error) {
 	var s Snapshot
 	s.SchemaVersion, s.ID, s.GeneratedAt, s.AgentVersion = SchemaVersion, ids.New(now), now.UTC(), agentVersion
@@ -269,7 +261,6 @@ func redactResult(red *Redactor, r *compare.Result) {
 	}
 }
 
-// Encode serializa o snapshot (JSON indentado) e calcula o SHA-256.
 func Encode(s Snapshot) ([]byte, string, error) {
 	b, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
@@ -280,7 +271,6 @@ func Encode(s Snapshot) ([]byte, string, error) {
 	return b, hex.EncodeToString(sum[:]), nil
 }
 
-// Save gera JSON e HTML do mesmo snapshot e grava os dois, imutáveis.
 func Save(ctx context.Context, st *store.Store, s Snapshot, opt Options) (store.ExportMeta, error) {
 	body, digest, err := Encode(s)
 	if err != nil {

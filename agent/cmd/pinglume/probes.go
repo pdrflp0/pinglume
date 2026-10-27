@@ -17,8 +17,6 @@ import (
 	"pinglume/agent/internal/store"
 )
 
-// probeConfig reúne as sondas do testbed. Em produção os endpoints serão
-// predefinidos; até lá, todo alvo é de desenvolvimento e precisa ser local.
 type probeConfig struct {
 	targets, resolvers          devTargets
 	tcpInterval, tcpTimeout     time.Duration
@@ -39,9 +37,6 @@ func (c probeConfig) validate() error {
 	return nil
 }
 
-// loadPinnedCA lê o certificado do testbed e devolve o pool e uma impressão
-// digital curta, que entra nos parâmetros da sonda: trocar o certificado cria
-// uma nova definição, em vez de misturar medições.
 func loadPinnedCA(path string) (*x509.CertPool, string, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -98,7 +93,7 @@ func buildJobs(ctx context.Context, st *store.Store, c probeConfig, now time.Tim
 		if pool == nil {
 			continue
 		}
-		url := "https://" + addr + "/p" // por IP: a sonda HTTPS não depende de DNS
+		url := "https://" + addr + "/p"
 		if err := add(t.Label, host,
 			probe.HTTPSGet{URL: url, ServerName: c.serverName, RootCAs: pool, Timeout: c.httpsTimeout},
 			url, c.httpsInterval, c.httpsTimeout,

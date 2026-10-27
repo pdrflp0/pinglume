@@ -34,6 +34,7 @@ const status: Status = {
         coverage: 0.97,
         probeDefId: "p1",
         backoffMs: 0,
+        approximate: true,
         lastStarted: "2026-10-20T21:14:55Z",
       },
     ],
@@ -105,7 +106,6 @@ let incidents: unknown[] = [];
 let experiments: unknown[] = [];
 const wifi = { interface: "en0", kind: "wifi", method: "teste" };
 
-/** Responde por rota, como o agente. */
 const exportMeta = {
   id: "01EXPORTABCDEF", createdAt: "2026-10-20T21:15:00Z", from: "2026-10-20T21:00:00Z", to: "2026-10-20T21:15:00Z",
   options: "{}", schemaVersion: "pinglume-export/1", agentVersion: "t", sha256: "ab".repeat(32),
@@ -115,6 +115,15 @@ function route(url: string, init?: RequestInit) {
   if (url === "/api/v1/network") return respond(wifi);
   if (url === "/api/v1/exports" && init?.method === "POST") return respond(exportMeta, { status: 201 });
   if (url === "/api/v1/exports") return respond([]);
+  if (url === "/api/v1/storage")
+    return respond({
+      usage: { usedBytes: 12.5 * 1048576, fileBytes: 13 * 1048576 },
+      limitBytes: 250 * 1048576,
+      rawRetentionMs: 7 * 24 * 3600_000,
+      aggregateRetentionMs: 90 * 24 * 3600_000,
+      oldestRaw: null,
+      oldestAggregate: null,
+    });
   if (url === "/api/v1/experiments" && init?.method === "POST") return respond({}, { status: 201 });
   if (url.startsWith("/api/v1/experiments")) return respond(experiments);
   if (url === "/api/v1/incidents" && init?.method === "POST") {
@@ -167,11 +176,11 @@ test("mostra cobertura, lacunas e falhas rotuladas por protocolo", async () => {
   expect((await screen.findAllByText("encerramento inesperado do agente")).length).toBeGreaterThan(0);
   expect(screen.getByText("conexão recusada")).toBeTruthy();
   expect(screen.getByText("97%")).toBeTruthy();
-  // A barra tem descrição textual equivalente.
+
   const bar = screen.getByRole("img", { name: /Distribuição do período/ });
   expect(bar.getAttribute("aria-label")).toContain("Agente parado: 2 min");
   expect(bar.getAttribute("aria-label")).toContain("Sem registro: 3 min");
-  // Nenhum rótulo afirma perda de pacotes.
+
   expect(document.body.textContent).not.toMatch(/perda de pacotes(?! IP)/i);
 });
 
@@ -203,7 +212,7 @@ test("teclado percorre a linha do tempo e lê os valores do trecho", async () =>
   const plot = await screen.findByRole("group", { name: "Linha do tempo das sondas" });
   plot.focus();
   fireEvent.keyDown(plot, { key: "Home" });
-  // Do início (21:00:00) até o balde de 21:01:00 são 20 trechos de 3 s.
+
   for (let i = 0; i < 20; i++) fireEvent.keyDown(plot, { key: "ArrowRight" });
   const readout = document.querySelector(".tl-readout")!;
   expect(readout.textContent).toContain("1 execução, 1 ok");
@@ -244,7 +253,7 @@ test("relatar: diálogo envia o sintoma e a análise aparece com ressalva de cau
   expect(await screen.findByText(/falhou em 5 de 36/)).toBeTruthy();
   expect(screen.getByText(/não prova que ela causou/)).toBeTruthy();
   expect(screen.getAllByText("Degradação observada").length).toBeGreaterThan(0);
-  // O relato aparece na linha do tempo como marca própria, distinta das medições.
+
   expect(screen.getByLabelText(/Relato: Áudio cortou às/)).toBeTruthy();
 });
 
@@ -392,4 +401,13 @@ test("exportar: opções enviadas, prévia isolada e links de download com hash"
   const html = screen.getByText("Baixar HTML") as HTMLAnchorElement;
   expect(html.getAttribute("href")).toBe("/api/v1/exports/01EXPORTABCDEF/download?format=html");
   expect(screen.getByText(/não pode ser revogado/)).toBeTruthy();
+});
+
+test("rodapé mostra uso do banco e retenção; percentis aproximados são sinalizados", async () => {
+  fetchMock.mockImplementation(route);
+  render(<App />);
+  expect(await screen.findByText(/banco 12,5 MB/)).toBeTruthy();
+  expect(screen.getByText(/de 250,0 MB/)).toBeTruthy();
+  expect(screen.getByText(/guardadas por 7 dias, agregados por 90 dias/)).toBeTruthy();
+  expect(screen.getAllByText("aprox.").length).toBe(2);
 });
