@@ -17,7 +17,7 @@ type fixture struct {
 	t    *testing.T
 	st   *store.Store
 	dev  string
-	defs map[string]string // kind → id
+	defs map[string]string
 	seq  map[string]int64
 }
 
@@ -42,7 +42,6 @@ func newFixture(t *testing.T) *fixture {
 	return f
 }
 
-// measuring registra cobertura "medindo" em [a, b].
 func (f *fixture) measuring(a, b time.Time) {
 	ctx := context.Background()
 	f.st.Transition(ctx, f.dev, a, nil, &store.Interval{Start: a, State: "measuring"})
@@ -50,7 +49,6 @@ func (f *fixture) measuring(a, b time.Time) {
 	f.st.Transition(ctx, f.dev, b, nil, nil)
 }
 
-// obs grava uma observação a cada 10 s em [a, b) para o tipo dado.
 func (f *fixture) obs(kind string, a, b time.Time, status string, dur time.Duration) {
 	ctx := context.Background()
 	for t := a; t.Before(b); t = t.Add(10 * time.Second) {
@@ -80,7 +78,6 @@ var (
 	later    = tInc.Add(10 * time.Minute)
 )
 
-// normal grava cobertura e observações ok para as três sondas em todo o período.
 func (f *fixture) normal(until time.Time) {
 	f.measuring(baseFrom, until)
 	for _, k := range []string{"tcp", "dns", "https"} {
@@ -109,7 +106,7 @@ func TestNoCoverage(t *testing.T) {
 
 func TestAgentStoppedDuringWindowIsNoCoverage(t *testing.T) {
 	f := newFixture(t)
-	f.measuring(baseFrom, winFrom.Add(2*time.Minute)) // mediu só 2 de 6 min
+	f.measuring(baseFrom, winFrom.Add(2*time.Minute))
 	f.obs("tcp", baseFrom, winFrom.Add(2*time.Minute), "ok", time.Millisecond)
 	if a := f.analyze(later); a.Verdict != VerdictNoCoverage {
 		t.Fatalf("veredito = %s", a.Verdict)
@@ -192,7 +189,6 @@ func TestSlowLatency(t *testing.T) {
 	}
 }
 
-// Sem linha de base suficiente, a latência não é julgada (não vira "lenta").
 func TestNoBaselineNoSlowVerdict(t *testing.T) {
 	f := newFixture(t)
 	f.measuring(winFrom, later)
@@ -213,7 +209,7 @@ func TestNeverBlamesTheProvider(t *testing.T) {
 		f.obs(k, winFrom, winTo, "timeout", time.Second)
 	}
 	txt := strings.ToLower(allText(f.analyze(later)))
-	// A ressalva obrigatória nega a causalidade; o resto do texto não pode afirmá-la.
+
 	disclaimer := "isso não prova que ela causou o problema da chamada."
 	if !strings.Contains(txt, disclaimer) {
 		t.Fatal("ressalva de causalidade ausente")
@@ -245,7 +241,7 @@ func TestPendingThenFrozen(t *testing.T) {
 	if !first.Final {
 		t.Fatal("deveria estar final")
 	}
-	// Dados que chegam depois (ex.: sincronização atrasada) não mudam um resultado gravado.
+
 	f.obs("https", tInc, winTo, "timeout", time.Second)
 	again, _ := Load(ctx, f.st, inc, later.Add(time.Hour), time.Time{})
 	if again.Verdict != first.Verdict || len(again.Findings) != len(first.Findings) {
@@ -260,11 +256,9 @@ func TestPendingThenFrozen(t *testing.T) {
 	}
 }
 
-// Falha medida é evidência mesmo com cobertura parcial: vira degradação com
-// ressalva, e não "sem cobertura".
 func TestPartialCoverageWithFailuresIsDegradation(t *testing.T) {
 	f := newFixture(t)
-	start := winFrom.Add(3*time.Minute + 10*time.Second) // agente começou no meio da janela
+	start := winFrom.Add(3*time.Minute + 10*time.Second)
 	f.measuring(start, later)
 	f.obs("tcp", start, tInc, "ok", time.Millisecond)
 	f.obs("tcp", tInc, winTo, "refused", time.Millisecond)

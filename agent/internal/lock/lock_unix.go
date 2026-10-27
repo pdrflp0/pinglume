@@ -1,7 +1,5 @@
 //go:build unix
 
-// Package lock garante uma única instância do agente por diretório de dados.
-// Duas instâncias disputariam a mesma sequência de observações.
 package lock
 
 import (
@@ -32,5 +30,4 @@ func Acquire(path string) (*Lock, error) {
 	return &Lock{f: f}, nil
 }
 
-// Release libera a trava. O sistema também a libera se o processo morrer.
 func (l *Lock) Release() error { return l.f.Close() }

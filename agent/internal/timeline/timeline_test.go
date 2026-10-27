@@ -23,7 +23,7 @@ func TestBucketsSeparateProbeVersionsAndCountFailures(t *testing.T) {
 	ep := store.Endpoint{Label: "ep-1", Host: "127.0.0.1", Owner: "dev"}
 	v1, _ := st.EnsureProbeDefinition(ctx, ep, store.ProbeDefinition{Kind: "tcp", Target: "127.0.0.1:1",
 		Interval: 10 * time.Second, Timeout: time.Second, ProtocolVersion: 1}, t0)
-	// Mesmo alvo, timeout diferente: outra definição, outra série.
+
 	v1b, _ := st.EnsureProbeDefinition(ctx, ep, store.ProbeDefinition{Kind: "tcp", Target: "127.0.0.1:1",
 		Interval: 10 * time.Second, Timeout: 2 * time.Second, ProtocolVersion: 1}, t0)
 
@@ -35,7 +35,7 @@ func TestBucketsSeparateProbeVersionsAndCountFailures(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// Balde 0 (0–60 s): 3 ok + 1 refused. Balde 2 (120–180 s): 1 timeout.
+
 	ins(v1.ID, 1, t0.Add(1*time.Second), 1*time.Millisecond, "ok")
 	ins(v1.ID, 2, t0.Add(11*time.Second), 2*time.Millisecond, "ok")
 	ins(v1.ID, 3, t0.Add(21*time.Second), 9*time.Millisecond, "ok")
@@ -66,7 +66,7 @@ func TestBucketsSeparateProbeVersionsAndCountFailures(t *testing.T) {
 	if b0.N != 4 || b0.OK != 3 || b0.Fail["refused"] != 1 {
 		t.Fatalf("balde 0: %+v", b0)
 	}
-	// Latência só das ok: o refused de 500 ms não entra no p95.
+
 	if *b0.P50US != 2000 || *b0.P95US != 9000 || *b0.MaxUS != 9000 {
 		t.Fatalf("percentis do balde 0: p50=%d p95=%d max=%d", *b0.P50US, *b0.P95US, *b0.MaxUS)
 	}

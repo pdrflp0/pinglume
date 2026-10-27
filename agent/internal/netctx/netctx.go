@@ -1,7 +1,3 @@
-// Package netctx detecta por qual interface o computador está saindo para a
-// internet e de que tipo ela é (Wi-Fi, cabo, VPN). Só lê o estado do sistema:
-// não muda rotas nem configurações, e não coleta o nome da rede Wi-Fi (no
-// macOS isso exigiria permissão de Localização).
 package netctx
 
 import (
@@ -18,12 +14,10 @@ const (
 	KindUnknown  = "unknown"
 )
 
-// Context é a interface de saída num instante.
 type Context struct {
 	Interface string `json:"interface"`
 	Kind      string `json:"kind"`
-	// Method diz como o tipo foi obtido, para a origem ficar explícita.
-	Method string `json:"method"`
+	Method    string `json:"method"`
 }
 
 func (c Context) Equal(o Context) bool { return c.Interface == o.Interface && c.Kind == o.Kind }
@@ -32,8 +26,6 @@ type Detector interface {
 	Detect(ctx context.Context) Context
 }
 
-// parseHardwarePorts lê a saída de `networksetup -listallhardwareports` e
-// devolve dispositivo → nome da porta (ex.: "en0" → "Wi-Fi").
 func parseHardwarePorts(out string) map[string]string {
 	ports := map[string]string{}
 	var port string
@@ -50,7 +42,6 @@ func parseHardwarePorts(out string) map[string]string {
 	return ports
 }
 
-// classify decide o tipo pelo nome da interface e da porta de hardware.
 func classify(iface, port string) string {
 	switch {
 	case iface == "":

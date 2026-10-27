@@ -83,7 +83,7 @@ func TestExperimentFlow(t *testing.T) {
 	c.advance(10*time.Minute + time.Second)
 	_, e = c.call("GET", "/api/v1/experiments/"+id, "")
 	res, _ := e["result"].(map[string]any)
-	// Sem medições no teste: as sondas não rodaram, então nada é comparável.
+
 	if e["phase"] != "done" || res == nil || res["verdict"] != "nao_comparavel" {
 		t.Fatalf("resultado: %v %v", e["phase"], res)
 	}
@@ -110,7 +110,7 @@ func TestExperimentCancelAndValidation(t *testing.T) {
 	if code, e := c.call("POST", "/api/v1/experiments/"+id+"/cancel", ""); code != 200 || e["phase"] != "cancelled" {
 		t.Fatalf("cancelar: %d %v", code, e["phase"])
 	}
-	// Cancelada, libera nova comparação.
+
 	if code, _ := c.call("POST", "/api/v1/experiments", `{"question":"q","intervention":"i","windowMinutes":10}`); code != http.StatusCreated {
 		t.Fatalf("nova depois de cancelar: %d", code)
 	}

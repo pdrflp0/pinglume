@@ -90,7 +90,6 @@ func (e *env) doBody(method, path, body string, opts ...reqOpt) *httptest.Respon
 
 func (e *env) bearer() reqOpt { return withHeader("Authorization", "Bearer "+e.token) }
 
-// login faz o fluxo completo: código pela CLI → /auth → cookie.
 func (e *env) login(t *testing.T) *http.Cookie {
 	t.Helper()
 	w := e.do("POST", "/api/v1/auth/codes", e.bearer())
@@ -138,7 +137,7 @@ func TestAuthRequired(t *testing.T) {
 	if w := e.do("GET", "/api/v1/status", withCookie(&http.Cookie{Name: sessionCookie, Value: "inventada"})); w.Code != http.StatusUnauthorized {
 		t.Fatalf("sessão inventada: %d", w.Code)
 	}
-	// Só a CLI (token) pode emitir códigos: uma sessão de navegador não.
+
 	c := e.login(t)
 	if w := e.do("POST", "/api/v1/auth/codes", withCookie(c), withHeader("Origin", "http://"+host)); w.Code != http.StatusUnauthorized {
 		t.Fatalf("sessão emitindo código: %d", w.Code)
@@ -197,7 +196,7 @@ func TestCrossOriginRejected(t *testing.T) {
 	if e.ctl.State() != "measuring" {
 		t.Fatal("algum pedido recusado chegou a pausar o agente")
 	}
-	// Leitura de outro site também é recusada.
+
 	if w := e.do("GET", "/api/v1/status", withCookie(c), withHeader("Sec-Fetch-Site", "cross-site")); w.Code != http.StatusForbidden {
 		t.Fatalf("leitura cross-site: %d", w.Code)
 	}
@@ -320,13 +319,12 @@ func TestIncidentLifecycle(t *testing.T) {
 		t.Fatalf("relato recém-criado deveria aguardar a janela fechar: %s", created.Analysis.Verdict)
 	}
 
-	// Pelo navegador: sessão + Origin.
 	c := e.login(t)
 	w = e.doBody("POST", "/api/v1/incidents", `{"symptom":"slow"}`, withCookie(c), withHeader("Origin", "http://"+host))
 	if w.Code != http.StatusCreated || !strings.Contains(w.Body.String(), `"createdVia":"dashboard"`) {
 		t.Fatalf("criar pelo navegador: %d %s", w.Code, w.Body)
 	}
-	// Outro site não cria relatos.
+
 	if w := e.doBody("POST", "/api/v1/incidents", `{"symptom":"slow"}`, withCookie(c), withHeader("Origin", "https://evil.example")); w.Code != http.StatusForbidden {
 		t.Fatalf("cross-origin: %d", w.Code)
 	}

@@ -1,8 +1,3 @@
-// probe-server é o endpoint das sondas Pinglume:
-//   - TCP+HTTPS na mesma porta (a sonda TCP só abre e fecha a conexão);
-//   - GET /p devolve 64 bytes, sem cache;
-//   - DNS autoritativo mínimo para uma zona de teste (UDP);
-//   - API de administração em loopback para injetar falhas no testbed.
 package main
 
 import (
@@ -24,7 +19,6 @@ import (
 	"time"
 )
 
-// payload tem 64 bytes fixos: a sonda mede latência, não vazão.
 var payload = []byte(strings.Repeat("pinglume-probe-v1 ", 4)[:63] + "\n")
 
 func main() {
@@ -71,7 +65,7 @@ func main() {
 		http: &http.Server{
 			Handler:           probeHandler(faults),
 			ReadHeaderTimeout: 5 * time.Second,
-			// A sonda TCP fecha antes do TLS; isso não é erro do servidor.
+
 			ErrorLog: log.New(io.Discard, "", 0),
 		},
 		tlsConf: &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12},
@@ -111,7 +105,6 @@ func main() {
 	<-ctx.Done()
 }
 
-// probeServer abre e fecha a escuta TCP conforme a falha "listener".
 type probeServer struct {
 	mu      sync.Mutex
 	addr    string
@@ -171,8 +164,6 @@ func probeHandler(f *Faults) http.Handler {
 	return mux
 }
 
-// ipLimiter conta requisições por IP numa janela fixa. Simples de propósito:
-// protege o endpoint de um cliente com defeito, não de ataques.
 type ipLimiter struct {
 	mu     sync.Mutex
 	max    int

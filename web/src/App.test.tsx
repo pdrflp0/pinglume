@@ -105,7 +105,6 @@ let incidents: unknown[] = [];
 let experiments: unknown[] = [];
 const wifi = { interface: "en0", kind: "wifi", method: "teste" };
 
-/** Responde por rota, como o agente. */
 const exportMeta = {
   id: "01EXPORTABCDEF", createdAt: "2026-10-20T21:15:00Z", from: "2026-10-20T21:00:00Z", to: "2026-10-20T21:15:00Z",
   options: "{}", schemaVersion: "pinglume-export/1", agentVersion: "t", sha256: "ab".repeat(32),
@@ -167,11 +166,11 @@ test("mostra cobertura, lacunas e falhas rotuladas por protocolo", async () => {
   expect((await screen.findAllByText("encerramento inesperado do agente")).length).toBeGreaterThan(0);
   expect(screen.getByText("conexão recusada")).toBeTruthy();
   expect(screen.getByText("97%")).toBeTruthy();
-  // A barra tem descrição textual equivalente.
+
   const bar = screen.getByRole("img", { name: /Distribuição do período/ });
   expect(bar.getAttribute("aria-label")).toContain("Agente parado: 2 min");
   expect(bar.getAttribute("aria-label")).toContain("Sem registro: 3 min");
-  // Nenhum rótulo afirma perda de pacotes.
+
   expect(document.body.textContent).not.toMatch(/perda de pacotes(?! IP)/i);
 });
 
@@ -203,7 +202,7 @@ test("teclado percorre a linha do tempo e lê os valores do trecho", async () =>
   const plot = await screen.findByRole("group", { name: "Linha do tempo das sondas" });
   plot.focus();
   fireEvent.keyDown(plot, { key: "Home" });
-  // Do início (21:00:00) até o balde de 21:01:00 são 20 trechos de 3 s.
+
   for (let i = 0; i < 20; i++) fireEvent.keyDown(plot, { key: "ArrowRight" });
   const readout = document.querySelector(".tl-readout")!;
   expect(readout.textContent).toContain("1 execução, 1 ok");
@@ -244,7 +243,7 @@ test("relatar: diálogo envia o sintoma e a análise aparece com ressalva de cau
   expect(await screen.findByText(/falhou em 5 de 36/)).toBeTruthy();
   expect(screen.getByText(/não prova que ela causou/)).toBeTruthy();
   expect(screen.getAllByText("Degradação observada").length).toBeGreaterThan(0);
-  // O relato aparece na linha do tempo como marca própria, distinta das medições.
+
   expect(screen.getByLabelText(/Relato: Áudio cortou às/)).toBeTruthy();
 });
 

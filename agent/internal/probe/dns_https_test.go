@@ -12,8 +12,6 @@ import (
 	"time"
 )
 
-// fakeDNS responde consultas A da zona com 127.0.0.1, ou se comporta conforme mode:
-// "ok", "drop" (não responde) ou "nxdomain".
 func fakeDNS(t *testing.T, mode string) string {
 	t.Helper()
 	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
@@ -32,7 +30,7 @@ func fakeDNS(t *testing.T, mode string) string {
 				continue
 			}
 			q := buf[:n]
-			// fim da pergunta: nome terminado em 0, depois tipo e classe
+
 			i := 12
 			for i < n && q[i] != 0 {
 				i += int(q[i]) + 1
@@ -40,11 +38,11 @@ func fakeDNS(t *testing.T, mode string) string {
 			end := i + 5
 			qtype := binary.BigEndian.Uint16(q[i+1 : i+3])
 			resp := append([]byte{}, q[:end]...)
-			resp[2], resp[3] = 0x84, 0x00 // QR+AA, NOERROR
+			resp[2], resp[3] = 0x84, 0x00
 			if mode == "nxdomain" {
 				resp[3] = 0x03
 			} else if qtype == 1 {
-				resp[7] = 1 // ANCOUNT
+				resp[7] = 1
 				resp = append(resp, 0xC0, 0x0C, 0, 1, 0, 1, 0, 0, 0, 0, 0, 4, 127, 0, 0, 1)
 			}
 			pc.WriteTo(resp, from)
@@ -109,7 +107,7 @@ func TestHTTPSStatuses(t *testing.T) {
 	}
 
 	srv, _ := tlsServer(t, func(w http.ResponseWriter, r *http.Request) {})
-	// Raiz errada (sistema) para um certificado de teste: falha de TLS, não de rede.
+
 	if r := (HTTPSGet{URL: srv.URL, ServerName: "example.com", Timeout: time.Second}).Probe(context.Background()); r.Status != "tls_error" {
 		t.Errorf("CA desconhecida: %+v", r)
 	}
@@ -133,8 +131,6 @@ func TestHTTPSStatuses(t *testing.T) {
 	}
 }
 
-// Critério de aceite da F5: com o DNS fora, a sonda HTTPS por IP continua
-// respondendo, e cada uma é rotulada pelo seu protocolo.
 func TestDNSDownHTTPSByIPStillOK(t *testing.T) {
 	dns := DNSResolve{Zone: "p.pinglume.test", Resolver: fakeDNS(t, "drop"), Timeout: 300 * time.Millisecond}
 	srv, pool := tlsServer(t, func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })

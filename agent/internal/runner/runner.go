@@ -1,6 +1,3 @@
-// Package runner orquestra o agente: heartbeat da cobertura, agendador de
-// sondas e pausa/retomada. Pausar cancela as sondas em andamento; nenhuma nova
-// medição começa até a retomada.
 package runner
 
 import (
@@ -24,27 +21,18 @@ type Runner struct {
 	Scheduler *sched.Scheduler
 	Jobs      []sched.Job
 	Log       *slog.Logger
-
-	// Control recebe pedidos de pausa/retomada (da API local). Cada pedido é
-	// respondido em Done depois que o novo estado foi aplicado e gravado.
-	Control <-chan Command
-	// OnState, se definido, é chamado após cada mudança de estado (testes).
-	OnState func(state string)
-	// Net, se definido, é consultado a cada heartbeat; mudanças de interface
-	// viram eventos net_change (fator de confusão nas comparações).
-	Net netctx.Detector
-
-	state atomic.Value // string
-	net   atomic.Value // netctx.Context
+	Control   <-chan Command
+	OnState   func(state string)
+	Net       netctx.Detector
+	state     atomic.Value
+	net       atomic.Value
 }
 
-// NetContext devolve a última interface detectada; seguro para outras goroutines.
 func (r *Runner) NetContext() netctx.Context {
 	v, _ := r.net.Load().(netctx.Context)
 	return v
 }
 
-// checkNet detecta a interface e grava um evento quando ela muda.
 func (r *Runner) checkNet(ctx context.Context, first bool) {
 	if r.Net == nil {
 		return
@@ -57,7 +45,7 @@ func (r *Runner) checkNet(ctx context.Context, first bool) {
 	r.net.Store(cur)
 	kind := "net_change"
 	if first {
-		kind = "net_context" // estado inicial desta execução
+		kind = "net_context"
 	}
 	d, _ := json.Marshal(cur)
 	r.Store.InsertSystemEvent(ctx, r.Tracker.Clock.Now(), kind, string(d))
@@ -71,7 +59,6 @@ type Command struct {
 	Done  chan<- error
 }
 
-// State devolve o estado atual de cobertura; seguro para outras goroutines.
 func (r *Runner) State() string {
 	v, _ := r.state.Load().(string)
 	return v
@@ -84,7 +71,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 	initial := coverage.Measuring
 	if v == "1" {
-		initial = coverage.Paused // a pausa sobrevive a reinícios
+		initial = coverage.Paused
 	}
 	dets, err := r.Tracker.Start(ctx, initial)
 	if err != nil {

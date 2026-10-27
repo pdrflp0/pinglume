@@ -20,10 +20,9 @@ const (
 )
 
 type createIncidentRequest struct {
-	Symptom string `json:"symptom"`
-	Note    string `json:"note"`
-	// At é quando a pessoa diz que aconteceu; vazio = agora.
-	At *time.Time `json:"at"`
+	Symptom string     `json:"symptom"`
+	Note    string     `json:"note"`
+	At      *time.Time `json:"at"`
 }
 
 type incidentResponse struct {

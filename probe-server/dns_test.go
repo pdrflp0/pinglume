@@ -26,8 +26,6 @@ func startDNS(t *testing.T, fault string) (string, *Faults) {
 	return pc.LocalAddr().String(), f
 }
 
-// resolver usa o resolvedor do próprio Go apontado para o servidor de teste:
-// é o mesmo caminho que o agente usa no modo de desenvolvimento.
 func resolver(addr string) *net.Resolver {
 	return &net.Resolver{PreferGo: true, Dial: func(ctx context.Context, _, _ string) (net.Conn, error) {
 		var d net.Dialer
@@ -41,7 +39,7 @@ func TestAnswersAInZone(t *testing.T) {
 	if err != nil || len(ips) != 1 || ips[0].String() != "127.0.0.1" {
 		t.Fatalf("%v %v", ips, err)
 	}
-	// Maiúsculas não importam em DNS.
+
 	if _, err := resolver(addr).LookupNetIP(context.Background(), "ip4", "X.P.Pinglume.Test"); err != nil {
 		t.Fatal(err)
 	}

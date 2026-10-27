@@ -64,7 +64,6 @@ func cmdExport(args []string) error {
 	return nil
 }
 
-// apiDownload devolve o corpo bruto de uma rota autenticada.
 func apiDownload(c common, path string) ([]byte, error) {
 	tok, err := os.ReadFile(c.tokenPath())
 	if err != nil {

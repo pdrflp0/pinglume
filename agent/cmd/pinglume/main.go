@@ -65,7 +65,6 @@ comandos:
   version  mostra a versão`)
 }
 
-// common são as opções compartilhadas por todos os comandos.
 type common struct {
 	dataDir string
 	port    int
@@ -79,7 +78,7 @@ func (c *common) register(fs *flag.FlagSet) {
 func (c *common) tokenPath() string { return filepath.Join(c.dataDir, "api-token") }
 
 func defaultDataDir() string {
-	base, err := os.UserConfigDir() // macOS: ~/Library/Application Support
+	base, err := os.UserConfigDir()
 	if err != nil {
 		return ".pinglume"
 	}

@@ -37,7 +37,6 @@ func scanExport(sc interface{ Scan(...any) error }, extra ...any) (ExportMeta, e
 	return m, err
 }
 
-// Export devolve o snapshot e o corpo pedido ("json" ou "html").
 func (s *Store) Export(ctx context.Context, id, format string) (ExportMeta, string, error) {
 	col := "body_json"
 	if format == "html" {
@@ -68,7 +67,6 @@ func (s *Store) Exports(ctx context.Context, limit int) ([]ExportMeta, error) {
 	return out, rows.Err()
 }
 
-// Device devolve o dispositivo desta instalação.
 func (s *Store) Device(ctx context.Context) (Device, error) {
 	var d Device
 	err := s.db.QueryRowContext(ctx, `SELECT id, name, os, arch, agent_version FROM devices ORDER BY created_at_ms LIMIT 1`).

@@ -8,23 +8,16 @@ import (
 	"time"
 )
 
-// Faults é o estado de falhas simuladas. Só existe para o testbed: permite
-// reproduzir cenários (DNS fora, HTTPS lento, porta fechada) sem degradar
-// redes de terceiros.
 type Faults struct {
 	mu sync.RWMutex
 	f  FaultState
 }
 
 type FaultState struct {
-	// DNS: ok | drop (não responde) | servfail | nxdomain
-	DNS string `json:"dns"`
-	// HTTPS: ok | error500 | hang (segura a requisição sem responder)
-	HTTPS string `json:"https"`
-	// HTTPSDelay atrasa cada resposta HTTPS, ex.: "300ms".
+	DNS        string `json:"dns"`
+	HTTPS      string `json:"https"`
 	HTTPSDelay string `json:"httpsDelay"`
-	// Listener: open | closed. Fechado, TCP e HTTPS recebem conexão recusada.
-	Listener string `json:"listener"`
+	Listener   string `json:"listener"`
 }
 
 func defaultFaults() FaultState {
@@ -74,7 +67,6 @@ func (f *Faults) httpsDelay() time.Duration {
 	return d
 }
 
-// adminHandler expõe GET/PUT /faults. PUT aceita campos parciais.
 func adminHandler(f *Faults, onChange func(FaultState)) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /faults", func(w http.ResponseWriter, r *http.Request) {
