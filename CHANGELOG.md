@@ -4,6 +4,49 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); 
 
 ## [Não publicado]
 
+## [0.5.0] - 2026-11-01
+
+Fatia F10: modo demonstração separado e claramente identificado. Permite mostrar o Pinglume inteiro sem rede, sem testbed e sem misturar nada com medições reais. O Nível 1 ainda não está completo: faltam medição de recursos (F11) e sonda UDP (F12).
+
+### Adicionado
+
+**Comando `pinglume demo`**
+
+- Gera 3 h de histórico simulado que percorre o roteiro do §11 da especificação: uso normal, agente desligado por 5 min, degradação de 4 min com relato "áudio cortou" no meio, comparação guiada Wi-Fi × cabo (janelas A e B de 10 min, com troca de interface detectada), pausa de 5 min e relato "lentidão" sem degradação.
+- Continua ao vivo com sondas simuladas de TCP, DNS e HTTPS (latências e oscilação de uma conexão doméstica) e uma rajada de falhas de 1 min a cada 12 min.
+- Semente fixa: duas gerações produzem exatamente as mesmas medições. Os testes confirmam que o roteiro leva às análises pretendidas: "degradação observada" no primeiro relato, "sem degradação detectável" no segundo e "melhora" na comparação.
+- Nada vai para a rede: as sondas da demo não abrem conexões; a interface de rede detectada é simulada (`demo0` Wi-Fi, `demo1` cabo).
+- A cada início a demo recria o próprio banco; `--keep` mantém o existente.
+
+**Separação de dados reais**
+
+- O banco grava o modo (`real` ou `demo`). `pinglume run` recusa um banco de demonstração; `pinglume demo` recusa um banco que já tem medições, agregados ou relatos reais, esteja ele marcado ou não (bancos de versões anteriores contam como reais). A recriação do banco só apaga arquivos depois de confirmar que o banco é de demonstração.
+- Diretório próprio (`Pinglume Demo`) e porta própria (47822): a demo roda ao lado do agente real. A flag `--demo` aponta `open`, `status`, `incidents`, `export` e `storage` para ela.
+- O dispositivo da demo se chama `pinglume-demo`; o nome do computador não é usado.
+
+**Identificação em todo lugar**
+
+- Dashboard: faixa "SIMULAÇÃO" fixa no topo de todas as telas, inclusive a de login e a de agente fora do ar, e título da aba com "[SIMULAÇÃO]". A faixa consulta a nova rota `GET /api/v1/mode`, que só informa o modo e respeita a validação de `Host`.
+- `GET /api/v1/status` informa `mode`.
+- CLI: `pinglume status` abre com o aviso de modo demonstração.
+- Exportação: JSON com `"simulation": true` e aviso como primeiro item; HTML com faixa de simulação e título "[SIMULAÇÃO]"; arquivo baixado com o prefixo `pinglume-demo-`. Um teste garante que relatórios reais nunca recebem essa marca.
+
+### Alterado
+
+- O arranque do agente foi extraído para uma função compartilhada por `run` e `demo` (modo, preparação do banco, sondas e detector de rede passados como opções).
+
+### Corrigido
+
+Corrigido durante o desenvolvimento desta versão, antes de publicar:
+
+- Na primeira versão do roteiro, o Wi-Fi ruim da comparação também tinha falhas; com só 20 execuções HTTPS por janela, a diferença de falhas ficava inconclusiva e a regra (corretamente) dava "inconclusivo" no geral. O cenário foi ajustado para um Wi-Fi mais lento e instável, sem falhas; a regra não mudou.
+
+### Limites conhecidos
+
+- A demo mostra o comportamento do produto com dados gerados; ela não substitui medições reais nem valida limiares.
+- Os dados de ensaio guardados em `/tmp` são apagados periodicamente pelo macOS; ensaios longos precisam de outro diretório.
+- Seguem valendo os limites anteriores.
+
 ## [0.4.0] - 2026-10-27
 
 Fatia F9: retenção, compactação por minuto e limite de disco. Também remove todos os comentários do código, mantendo só as diretivas exigidas pelas ferramentas. O Nível 1 ainda não está completo: faltam modo demo (F10), medição de recursos (F11) e sonda UDP (F12).
@@ -215,7 +258,8 @@ Primeira versão. Nível 1 ainda incompleto: só existe a sonda TCP, e ela mede 
 - Sem sondas DNS/HTTPS/UDP, incidentes, comparação guiada, exportação, retenção ou modo demo (fatias F5–F12).
 - Nenhuma medição de recursos (CPU, memória, tráfego) publicada ainda.
 
-[Não publicado]: https://github.com/pdrflp0/pinglume/compare/v0.4.0...develop
+[Não publicado]: https://github.com/pdrflp0/pinglume/compare/v0.5.0...develop
+[0.5.0]: https://github.com/pdrflp0/pinglume/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/pdrflp0/pinglume/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/pdrflp0/pinglume/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/pdrflp0/pinglume/compare/v0.1.0...v0.2.0
