@@ -37,6 +37,7 @@ type Server struct {
 	Static    fs.FS
 	DeviceID  string
 	Retention retention.Policy
+	Mode      string
 	Now       func() time.Time
 	sess      *sessions
 }
@@ -49,6 +50,9 @@ func (s *Server) Handler() http.Handler {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /auth", s.handleAuth)
+	mux.HandleFunc("GET /api/v1/mode", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]string{"mode": s.mode()})
+	})
 	mux.Handle("POST /api/v1/auth/codes", s.require(tokenOnly, s.handleNewCode))
 	mux.Handle("POST /api/v1/auth/logout", s.require(anyAuth, s.handleLogout))
 	mux.Handle("GET /api/v1/status", s.require(anyAuth, s.handleStatus))
@@ -193,6 +197,7 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 
 type statusResponse struct {
 	AgentVersion string          `json:"agentVersion"`
+	Mode         string          `json:"mode"`
 	State        string          `json:"state"`
 	Now          time.Time       `json:"now"`
 	Summary      summary.Summary `json:"summary"`
@@ -208,7 +213,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "falha ao ler o histórico")
 		return
 	}
-	writeJSON(w, http.StatusOK, statusResponse{AgentVersion: s.Version, State: s.Ctl.State(), Now: s.Now(), Summary: sum})
+	writeJSON(w, http.StatusOK, statusResponse{AgentVersion: s.Version, Mode: s.mode(), State: s.Ctl.State(), Now: s.Now(), Summary: sum})
 }
 
 func (s *Server) parseRange(w http.ResponseWriter, r *http.Request, def, minSpan time.Duration) (time.Time, time.Time, bool) {
@@ -329,4 +334,11 @@ func (s *Server) handleStorage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, info)
+}
+
+func (s *Server) mode() string {
+	if s.Mode == "" {
+		return store.ModeReal
+	}
+	return s.Mode
 }

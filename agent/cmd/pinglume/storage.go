@@ -20,6 +20,7 @@ func cmdStorage(args []string) error {
 	fs.DurationVar(&pol.Aggregates, "aggregate-retention", pol.Aggregates, "retenção dos agregados configurada no agente")
 	limitMB := fs.Int64("disk-limit-mb", pol.LimitBytes>>20, "limite configurado no agente, em MB")
 	fs.Parse(args)
+	c.resolve()
 	pol.LimitBytes = *limitMB << 20
 
 	ctx := context.Background()

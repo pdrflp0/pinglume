@@ -68,6 +68,7 @@ type Snapshot struct {
 	GeneratedAt   time.Time `json:"generatedAt"`
 	AgentVersion  string    `json:"agentVersion"`
 	Preview       bool      `json:"preview"`
+	Simulation    bool      `json:"simulation"`
 	Period        struct {
 		From time.Time `json:"from"`
 		To   time.Time `json:"to"`
@@ -126,6 +127,14 @@ func Build(ctx context.Context, st *store.Store, opt Options, agentVersion strin
 		"Gerado pelo Pinglume a partir de medições feitas neste computador.",
 		"Um arquivo baixado não pode ser revogado: quem o receber pode guardá-lo e repassá-lo.",
 		"As medições descrevem o caminho até os endpoints medidos; não provam a causa de um problema numa chamada.",
+	}
+	mode, err := st.Mode(ctx)
+	if err != nil {
+		return s, err
+	}
+	if mode == store.ModeDemo {
+		s.Simulation = true
+		s.Notice = append([]string{"SIMULAÇÃO: todos os dados deste relatório foram gerados pelo modo demonstração do Pinglume. Não são medições reais."}, s.Notice...)
 	}
 	s.Method = method()
 	s.Included.Incidents, s.Included.Comparisons = opt.IncludeIncidents, opt.IncludeComparisons

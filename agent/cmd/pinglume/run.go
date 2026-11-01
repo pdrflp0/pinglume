@@ -99,6 +99,7 @@ func cmdRun(args []string) error {
 	fs.Var(&cfg.targets, "dev-target", "alvo TCP/HTTPS de desenvolvimento label=ip:porta (repetível)")
 	fs.Var(&cfg.resolvers, "dev-dns", "servidor DNS de desenvolvimento label=ip:porta (repetível)")
 	fs.Parse(args)
+	c.resolve()
 
 	if len(cfg.targets) == 0 && len(cfg.resolvers) == 0 {
 		return errors.New("nenhum endpoint configurado: os endpoints próprios ainda não estão hospedados; " +
@@ -112,6 +113,26 @@ func cmdRun(args []string) error {
 		return errors.New("retention ≥ 1h, aggregate-retention ≥ retention e disk-limit-mb ≥ 0")
 	}
 
+	return startAgent(agentOptions{common: c, mode: store.ModeReal, concurrency: *concurrency, policy: pol,
+		jobs: func(ctx context.Context, st *store.Store, now time.Time) ([]sched.Job, error) {
+			return buildJobs(ctx, st, cfg, now)
+		},
+		net: &netctx.System{}})
+}
+
+type agentOptions struct {
+	common      common
+	mode        string
+	concurrency int
+	policy      retention.Policy
+	deviceName  string
+	prepare     func(ctx context.Context, st *store.Store, deviceID string, now time.Time) error
+	jobs        func(ctx context.Context, st *store.Store, now time.Time) ([]sched.Job, error)
+	net         netctx.Detector
+}
+
+func startAgent(o agentOptions) error {
+	c, pol, concurrency := o.common, o.policy, &o.concurrency
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -135,9 +156,15 @@ func cmdRun(args []string) error {
 		return err
 	}
 	defer st.Close()
+	if err := st.ClaimMode(ctx, o.mode); err != nil {
+		return err
+	}
 
 	clk := clock.System{}
 	hostname, _ := os.Hostname()
+	if o.deviceName != "" {
+		hostname = o.deviceName
+	}
 	dev, err := st.EnsureDevice(ctx, store.Device{
 		Name: hostname, OS: runtime.GOOS, Arch: runtime.GOARCH, AgentVersion: version,
 	}, clk.Now())
@@ -145,7 +172,12 @@ func cmdRun(args []string) error {
 		return err
 	}
 
-	jobs, err := buildJobs(ctx, st, cfg, clk.Now())
+	if o.prepare != nil {
+		if err := o.prepare(ctx, st, dev.ID, clk.Now()); err != nil {
+			return err
+		}
+	}
+	jobs, err := o.jobs(ctx, st, clk.Now())
 	if err != nil {
 		return err
 	}
@@ -158,12 +190,12 @@ func cmdRun(args []string) error {
 		Jobs:       jobs,
 		Log:        log,
 		Control:    ctl,
-		Net:        &netctx.System{},
+		Net:        o.net,
 		Maintainer: &retention.Maintainer{Store: st, Clock: clk, Policy: pol, Log: log},
 	}
 
 	srv := &api.Server{Store: st, Ctl: controller{r: r, ctl: ctl}, Token: token, Port: c.port,
-		Version: version, Static: webui.FS(), DeviceID: dev.ID, Retention: pol}
+		Version: version, Static: webui.FS(), DeviceID: dev.ID, Retention: pol, Mode: o.mode}
 	ln, err := srv.Listen()
 	if err != nil {
 		return fmt.Errorf("API local na porta %d: %w", c.port, err)
@@ -179,7 +211,7 @@ func cmdRun(args []string) error {
 	}
 
 	st.InsertSystemEvent(ctx, clk.Now(), "agent_start", version)
-	log.Info("agente iniciado", "dados", c.dataDir, "sondas", len(jobs),
+	log.Info("agente iniciado", "modo", o.mode, "dados", c.dataDir, "sondas", len(jobs),
 		"dashboard", fmt.Sprintf("http://127.0.0.1:%d (use `pinglume open`)", c.port))
 
 	runErr := r.Run(ctx)

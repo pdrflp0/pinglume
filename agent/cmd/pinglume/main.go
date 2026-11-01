@@ -13,6 +13,7 @@ import (
 const (
 	version     = "0.5.0-dev"
 	defaultPort = 47821
+	demoPort    = 47822
 )
 
 func main() {
@@ -24,6 +25,8 @@ func main() {
 	switch os.Args[1] {
 	case "run":
 		err = cmdRun(os.Args[2:])
+	case "demo":
+		err = cmdDemo(os.Args[2:])
 	case "status":
 		err = cmdStatus(os.Args[2:])
 	case "open":
@@ -57,6 +60,7 @@ func usage() {
 
 comandos:
   run      inicia a coleta e o dashboard local (Ctrl+C encerra)
+  demo     inicia o modo demonstração: dados simulados, banco e porta separados
   open     abre o dashboard no navegador com uma sessão nova
   status   resume medições e cobertura recentes (lê o banco; funciona com o agente parado)
   mark       registra "travou agora" (um relato, não uma medição)
@@ -71,11 +75,25 @@ comandos:
 type common struct {
 	dataDir string
 	port    int
+	demo    bool
 }
 
 func (c *common) register(fs *flag.FlagSet) {
 	fs.StringVar(&c.dataDir, "data-dir", defaultDataDir(), "diretório de dados")
 	fs.IntVar(&c.port, "port", defaultPort, "porta da API local (só 127.0.0.1)")
+	fs.BoolVar(&c.demo, "demo", false, "usa o diretório e a porta do modo demonstração")
+}
+
+func (c *common) resolve() {
+	if !c.demo {
+		return
+	}
+	if c.dataDir == defaultDataDir() {
+		c.dataDir = defaultDataDir() + " Demo"
+	}
+	if c.port == defaultPort {
+		c.port = demoPort
+	}
 }
 
 func (c *common) tokenPath() string { return filepath.Join(c.dataDir, "api-token") }

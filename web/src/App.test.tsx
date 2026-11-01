@@ -1,10 +1,12 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { App } from "./App";
+import { SimulationBanner } from "./Simulation";
 import type { Status, Timeline } from "./api";
 
 const status: Status = {
   agentVersion: "0.1.0-dev",
+  mode: "real",
   state: "measuring",
   now: "2026-10-20T21:15:00Z",
   summary: {
@@ -111,7 +113,10 @@ const exportMeta = {
   options: "{}", schemaVersion: "pinglume-export/1", agentVersion: "t", sha256: "ab".repeat(32),
 };
 
+let mode = "real";
+
 function route(url: string, init?: RequestInit) {
+  if (url === "/api/v1/mode") return respond({ mode });
   if (url === "/api/v1/network") return respond(wifi);
   if (url === "/api/v1/exports" && init?.method === "POST") return respond(exportMeta, { status: 201 });
   if (url === "/api/v1/exports") return respond([]);
@@ -144,6 +149,7 @@ function respond(body: unknown, init: ResponseInit = { status: 200 }) {
 let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
+  mode = "real";
   incidents = [];
   experiments = [];
   vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -410,4 +416,30 @@ test("rodapé mostra uso do banco e retenção; percentis aproximados são sinal
   expect(screen.getByText(/de 250,0 MB/)).toBeTruthy();
   expect(screen.getByText(/guardadas por 7 dias, agregados por 90 dias/)).toBeTruthy();
   expect(screen.getAllByText("aprox.").length).toBe(2);
+});
+
+test("modo demonstração mostra a faixa de simulação mesmo antes do login", async () => {
+  mode = "demo";
+  fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+    if (url === "/api/v1/mode") return route(url, init);
+    return respond({ error: "sessão ausente" }, { status: 401 });
+  });
+  render(
+    <>
+      <SimulationBanner />
+      <App />
+    </>,
+  );
+  expect(await screen.findByText(/SIMULAÇÃO — modo demonstração/)).toBeTruthy();
+  expect(await screen.findByText("pinglume open")).toBeTruthy();
+  expect(document.title).toBe("[SIMULAÇÃO] Pinglume");
+});
+
+test("modo real não mostra a faixa", async () => {
+  fetchMock.mockImplementation(route);
+  render(<SimulationBanner />);
+  await vi.waitFor(() => {
+    if (!fetchMock.mock.calls.some(([u]) => u === "/api/v1/mode")) throw new Error("modo não consultado");
+  });
+  expect(screen.queryByText(/SIMULAÇÃO/)).toBeNull();
 });

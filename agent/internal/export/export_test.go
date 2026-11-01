@@ -224,3 +224,32 @@ func TestGapEndShowsDateWhenDayChanges(t *testing.T) {
 		t.Fatal("fim de lacuna em outro dia precisa mostrar a data")
 	}
 }
+
+func TestDemoExportIsMarkedAsSimulation(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.Open(ctx, filepath.Join(t.TempDir(), "d.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	st.ClaimMode(ctx, store.ModeDemo)
+	st.EnsureDevice(ctx, store.Device{Name: "pinglume-demo", OS: "darwin", Arch: "arm64", AgentVersion: "t"}, t0)
+	s, err := Build(ctx, st, Options{From: t0.Add(-time.Hour), To: t0}, "t", t0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	js, _, _ := Encode(s)
+	html, _ := RenderHTML(s, "")
+	if !s.Simulation || !strings.Contains(string(js), `"simulation": true`) || !strings.Contains(s.Notice[0], "SIMULAÇÃO") {
+		t.Fatal("JSON da demo precisa declarar simulação")
+	}
+	if !strings.Contains(html, `<p class="simulation">SIMULAÇÃO`) || !strings.Contains(html, "<title>[SIMULAÇÃO]") {
+		t.Fatal("HTML da demo precisa da faixa de simulação")
+	}
+	real := seed(t)
+	rs, _ := Build(ctx, real, Options{From: t0.Add(-time.Hour), To: now}, "t", now)
+	rh, _ := RenderHTML(rs, "")
+	if rs.Simulation || strings.Contains(rh, "SIMULAÇÃO") {
+		t.Fatal("exportação real não pode ser marcada como simulação")
+	}
+}
