@@ -50,6 +50,7 @@ func cmdMark(args []string) error {
 	note := fs.String("note", "", "observação livre (até 500 caracteres)")
 	ago := fs.Duration("ago", 0, "há quanto tempo aconteceu, ex.: 2m (até 24h)")
 	fs.Parse(args)
+	c.resolve()
 
 	body := map[string]any{"symptom": *symptom, "note": *note}
 	if *ago > 0 {
@@ -76,6 +77,7 @@ func cmdIncidents(args []string) error {
 	window := fs.Duration("window", 24*time.Hour, "período listado")
 	id := fs.String("id", "", "mostra a análise completa de um relato")
 	fs.Parse(args)
+	c.resolve()
 
 	if *id != "" {
 		var resp struct {

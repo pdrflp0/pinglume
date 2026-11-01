@@ -409,3 +409,17 @@ func TestStorageRoute(t *testing.T) {
 		t.Fatalf("sem credencial: %d", w.Code)
 	}
 }
+
+func TestModeRoute(t *testing.T) {
+	e := newEnv(t)
+	w := e.do("GET", "/api/v1/mode")
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"mode":"real"`) {
+		t.Fatalf("modo sem autenticação: %d %s", w.Code, w.Body)
+	}
+	if w := e.do("GET", "/api/v1/mode", withHost("evil.test:47821")); w.Code != http.StatusMisdirectedRequest {
+		t.Fatalf("rota de modo deve respeitar a validação de Host: %d", w.Code)
+	}
+	if w := e.do("GET", "/api/v1/status", e.bearer()); !strings.Contains(w.Body.String(), `"mode":"real"`) {
+		t.Fatalf("status sem modo: %s", w.Body)
+	}
+}

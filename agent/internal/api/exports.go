@@ -100,7 +100,11 @@ func (s *Server) handleDownloadExport(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "falha ao ler a exportação")
 		return
 	}
-	name := fmt.Sprintf("pinglume-%s-%s.%s", m.CreatedAt.Local().Format("2006-01-02-1504"), m.ID[len(m.ID)-6:], format)
+	prefix := "pinglume"
+	if s.mode() == store.ModeDemo {
+		prefix = "pinglume-demo"
+	}
+	name := fmt.Sprintf("%s-%s-%s.%s", prefix, m.CreatedAt.Local().Format("2006-01-02-1504"), m.ID[len(m.ID)-6:], format)
 	ctype := "application/json"
 	if format == "html" {
 		ctype = "text/html; charset=utf-8"
