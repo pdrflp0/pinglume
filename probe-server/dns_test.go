@@ -100,3 +100,71 @@ func TestFaultValidation(t *testing.T) {
 		}
 	}
 }
+
+func startEcho(t *testing.T, state FaultState) string {
+	t.Helper()
+	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { pc.Close() })
+	f := &Faults{f: defaultFaults()}
+	if err := f.Set(state); err != nil {
+		t.Fatal(err)
+	}
+	go serveUDPEcho(pc, f)
+	return pc.LocalAddr().String()
+}
+
+func echoCount(t *testing.T, addr string, payload []byte, n int) int {
+	t.Helper()
+	c, err := net.Dial("udp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	for i := 0; i < n; i++ {
+		c.Write(payload)
+	}
+	got := 0
+	buf := make([]byte, 256)
+	c.SetReadDeadline(time.Now().Add(300 * time.Millisecond))
+	for {
+		m, err := c.Read(buf)
+		if err != nil {
+			return got
+		}
+		if m == len(payload) {
+			got++
+		}
+	}
+}
+
+func TestUDPEchoAndFaults(t *testing.T) {
+	ok := defaultFaults()
+	pkt := append([]byte("PGLU"), make([]byte, 60)...)
+	if got := echoCount(t, startEcho(t, ok), pkt, 50); got != 50 {
+		t.Fatalf("eco sem falha: %d de 50", got)
+	}
+	if got := echoCount(t, startEcho(t, ok), append([]byte("XXXX"), make([]byte, 60)...), 5); got != 0 {
+		t.Fatal("pacote sem a assinatura não pode ser ecoado")
+	}
+	if got := echoCount(t, startEcho(t, ok), append([]byte("PGLU"), make([]byte, 300)...), 5); got != 0 {
+		t.Fatal("pacote grande não pode ser ecoado")
+	}
+	lossy := defaultFaults()
+	lossy.UDPLoss = 100
+	if got := echoCount(t, startEcho(t, lossy), pkt, 20); got != 0 {
+		t.Fatalf("perda de 100%%: %d ecoados", got)
+	}
+	half := defaultFaults()
+	half.UDPLoss = 50
+	if got := echoCount(t, startEcho(t, half), pkt, 200); got < 60 || got > 140 {
+		t.Fatalf("perda de 50%%: %d de 200 ecoados", got)
+	}
+	bad := defaultFaults()
+	bad.UDPLoss = 101
+	if (&Faults{f: defaultFaults()}).Set(bad) == nil {
+		t.Fatal("udpLoss > 100 deveria ser recusado")
+	}
+}

@@ -62,6 +62,7 @@ export const kindMeasure: Record<string, string> = {
   tcp: "handshake TCP",
   dns: "resolução de nome único",
   https: "requisição HTTPS completa, com conexão nova",
+  udp_echo: "RTT de rajadas UDP (20 datagramas a cada 20 ms)",
 };
 
 export const symptomLabel: Record<string, string> = {
@@ -113,4 +114,13 @@ export function until(start: string | number, end: string | number): string {
 
 export function megabytes(b: number): string {
   return `${(b / 1048576).toFixed(1).replace(".", ",")} MB`;
+}
+
+export function kindName(kind: string): string {
+  return kind === "udp_echo" ? "UDP" : kind.toUpperCase();
+}
+
+export function udpLoss(lost: number, sent: number): string {
+  const pct = sent > 0 ? (lost / sent) * 100 : 0;
+  return `perda de datagramas ${pct.toFixed(pct < 10 ? 1 : 0).replace(".", ",")}% (${lost} de ${sent})`;
 }

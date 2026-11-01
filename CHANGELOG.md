@@ -4,6 +4,16 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); 
 
 ## [Não publicado]
 
+### Adicionado
+
+- Sonda `udp_echo` (F12): rajada de 20 datagramas de 64 B a cada 20 ms com sequência e nonce; mede RTT (mediana e p95), perda de datagramas, reordenação e jitter; rajada sem nenhum eco vira `timeout`. Flags `--dev-udp`, `--udp-interval` (padrão 15 s) e `--udp-wait` (padrão 1 s).
+- `probe-server`: eco UDP (`-udp`) que só responde pacotes pequenos com a assinatura da sonda (sem amplificação), com limite por IP e falhas simuláveis `udpLoss` (0–100%) e `udpJitter`.
+- Perda e jitter UDP em todo o fluxo: resumo, linha do tempo (faixa "Perda"), compactação por minuto (migração 007), `incident-v1` (degradação quando a perda de datagramas supera a base em mais de 2 p.p.), `compare-v1` (perda por rajada com intervalo de 95%), exportação, CLI e dashboard; sempre rotulada como perda de datagramas da sonda, nunca como perda de pacotes IP.
+
+### Corrigido
+
+- O agendador descontava do intervalo a duração reportada pela sonda, e não o tempo decorrido; na sonda UDP, que reporta o RTT mediano (~0,2 ms) mas leva ~1,4 s por rajada, cada ciclo ficava mais longo e a cobertura caía para ~81%. Agora o agendador mede o tempo decorrido.
+
 ## [0.5.0] - 2026-11-01
 
 Fatia F10: modo demonstração separado e claramente identificado. Permite mostrar o Pinglume inteiro sem rede, sem testbed e sem misturar nada com medições reais. O Nível 1 ainda não está completo: faltam medição de recursos (F11) e sonda UDP (F12).

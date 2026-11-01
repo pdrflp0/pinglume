@@ -19,7 +19,8 @@ Ferramenta local para investigar falhas intermitentes de internet durante chamad
 | F8 exportação HTML/JSON com prévia e redação | feito e testado |
 | F9 retenção, compactação e limite de disco | feito e testado |
 | F10 modo demonstração separado | feito e testado |
-| F11 em diante | ver backlog no documento de desenho |
+| F11 medição de recursos | em medição (24 h) |
+| F12 sonda UDP de perda e jitter | feito e testado |
 
 ## Rodar localmente
 
@@ -168,7 +169,7 @@ Branches, versionamento (SemVer) e convenção de commits: [docs/fluxo-git.md](d
 
 - No testbed, a sonda DNS consulta o servidor de teste diretamente (`--dev-dns`). Em produção ela usará o resolvedor do sistema; as duas são definições diferentes e nunca se comparam.
 - Em backoff (até 8× o intervalo), a volta de uma sonda demora mais para aparecer: no ensaio, o DNS restaurado só foi medido ~22 s depois.
-- Sonda UDP (perda e jitter) é a fatia F12.
+- A sonda UDP (`--dev-udp`) envia rajadas de 20 datagramas de 64 B a cada 20 ms (ritmo de áudio de chamada) e mede RTT, perda de datagramas e jitter. É perda de datagramas da sonda, não perda geral de pacotes IP. Por padrão roda a cada 15 s; é a sonda que mais gera tráfego, então é recomendada em um endpoint só.
 - Os limiares da `incident-v1` (50% de cobertura, latência 2× a mediana e acima do p95 da base, 10 execuções ok de base) são escolhas iniciais, ainda não calibradas com uso real.
 - A `incident-v1` ainda não usa o tipo de rede: a linha de base compara com as 2 h anteriores mesmo que a rede tenha mudado (os eventos `net_change` já são gravados).
 - A comparação tem uma rodada A→B: mudança e horário se confundem, e o resultado sempre diz isso. Blocos repetidos (A-B-A) ficam para o Nível 2.

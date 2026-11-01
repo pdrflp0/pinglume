@@ -270,3 +270,29 @@ func TestPartialCoverageWithFailuresIsDegradation(t *testing.T) {
 		t.Fatalf("ressalva de cobertura ausente: %v", a.Caveats)
 	}
 }
+
+func TestUDPLossIsJudgedByDatagrams(t *testing.T) {
+	ctx := context.Background()
+	f := newFixture(t)
+	d, _ := f.st.EnsureProbeDefinition(ctx, store.Endpoint{Label: "ep-1", Host: "127.0.0.1", Owner: "dev"},
+		store.ProbeDefinition{Kind: "udp_echo", Target: "udp", Interval: 10 * time.Second, Timeout: time.Second, ProtocolVersion: 1}, tInc)
+	f.measuring(baseFrom, later)
+	burst := func(from, to time.Time, lost int) {
+		for ts := from; ts.Before(to); ts = ts.Add(10 * time.Second) {
+			f.seq["udp"]++
+			ph := fmt.Sprintf(`{"sent":20,"received":%d,"lost":%d,"jitter_us":300,"rtt_p50_us":900}`, 20-lost, lost)
+			f.st.InsertObservation(ctx, store.Observation{ID: fmt.Sprintf("u-%d", f.seq["udp"]), DeviceID: f.dev, ProbeDefID: d.ID,
+				Seq: f.seq["udp"], StartedWall: ts, Duration: 900 * time.Microsecond, Status: "ok", PhasesJSON: ph, ReceivedAt: ts})
+		}
+	}
+	burst(baseFrom, winFrom, 0)
+	burst(winFrom, winTo, 3)
+	a := f.analyze(later)
+	if a.Verdict != VerdictDegradation {
+		t.Fatalf("15%% de perda de datagramas deveria contar como degradação: %s", a.Verdict)
+	}
+	txt := allText(a)
+	if !strings.Contains(txt, "Perda de datagramas UDP para ep-1: 15%") || !strings.Contains(txt, "não uma medida geral de perda de pacotes") {
+		t.Fatalf("texto: %s", txt)
+	}
+}

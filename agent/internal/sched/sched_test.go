@@ -130,3 +130,34 @@ func TestBackoffEventsAndReset(t *testing.T) {
 		t.Fatalf("multiplicadores = %v", mults)
 	}
 }
+
+type slowReport struct{}
+
+func (slowReport) Kind() string         { return "udp_echo" }
+func (slowReport) ProtocolVersion() int { return 1 }
+func (slowReport) Probe(context.Context) probe.Result {
+	time.Sleep(30 * time.Millisecond)
+	return probe.Result{Status: "ok", Duration: time.Millisecond}
+}
+
+func TestIntervalAccountsForRealElapsedTime(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.Open(ctx, filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	now := time.Now()
+	dev, _ := st.EnsureDevice(ctx, store.Device{Name: "t", AgentVersion: "t"}, now)
+	def, _ := st.EnsureProbeDefinition(ctx, store.Endpoint{Label: "ep", Host: "h", Owner: "dev"},
+		store.ProbeDefinition{Kind: "udp_echo", Target: "h:1", Interval: 50 * time.Millisecond, Timeout: 40 * time.Millisecond, ProtocolVersion: 1}, now)
+	s := &Scheduler{Store: st, Clock: clock.System{}, DeviceID: dev.ID, Concurrency: 1,
+		Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	runCtx, cancel := context.WithTimeout(ctx, 1050*time.Millisecond)
+	defer cancel()
+	s.Run(runCtx, []Job{{Def: def, Prober: slowReport{}}})
+	sums, _ := st.Summaries(ctx, now.Add(-time.Minute))
+	if n := sums[0].Total; n < 17 {
+		t.Fatalf("com intervalo de 50 ms em ~1 s deveriam ser ~20 execuções, vieram %d", n)
+	}
+}

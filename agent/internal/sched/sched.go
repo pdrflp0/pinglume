@@ -99,7 +99,9 @@ func (s *Scheduler) loop(ctx context.Context, j Job, seq int64, sem chan struct{
 		case sem <- struct{}{}:
 		}
 		startedWall := s.Clock.Now()
+		probeStart := time.Now()
 		res := j.Prober.Probe(ctx)
+		spent := time.Since(probeStart)
 		<-sem
 
 		obs := store.Observation{
@@ -142,7 +144,7 @@ func (s *Scheduler) loop(ctx context.Context, j Job, seq int64, sem chan struct{
 				setMult(min(maxMult, 1<<(fails-after+1)), "falhas seguidas: "+res.Status)
 			}
 		}
-		wait = s.nextWait(j.Def.Interval*time.Duration(mult), res.Duration)
+		wait = s.nextWait(j.Def.Interval*time.Duration(mult), spent)
 	}
 }
 

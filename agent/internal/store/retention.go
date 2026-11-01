@@ -22,6 +22,9 @@ type MinuteRow struct {
 	Failures        map[string]int
 	P50US, P95US    *int64
 	MinUS, MaxUS    *int64
+	UDPSent         int
+	UDPLost         int
+	JitterP50US     *int64
 }
 
 type CompactResult struct {
@@ -88,8 +91,9 @@ func (s *Store) CompactBefore(ctx context.Context, cutoff time.Time, limit int) 
 	}
 
 	rows, err := tx.QueryContext(ctx, `
-		SELECT probe_def_id, device_id, started_wall_ms, duration_us, status FROM observations
-		WHERE started_wall_ms < ? ORDER BY probe_def_id, started_wall_ms`, upTo.UnixMilli())
+		SELECT o.probe_def_id, o.device_id, o.started_wall_ms, o.duration_us, o.status, pd.kind, o.phases_json
+		FROM observations o JOIN probe_definitions pd ON pd.id = o.probe_def_id
+		WHERE o.started_wall_ms < ? ORDER BY o.probe_def_id, o.started_wall_ms`, upTo.UnixMilli())
 	if err != nil {
 		return res, err
 	}
@@ -98,17 +102,19 @@ func (s *Store) CompactBefore(ctx context.Context, cutoff time.Time, limit int) 
 		minute int64
 	}
 	type acc struct {
-		device string
-		n, ok  int
-		fails  map[string]int
-		durs   []int64
+		device           string
+		n, ok            int
+		fails            map[string]int
+		durs             []int64
+		udpSent, udpLost int
+		jitters          []int64
 	}
 	aggs := map[key]*acc{}
 	var keys []key
 	for rows.Next() {
-		var probe, device, status string
+		var probe, device, status, kind, phases string
 		var started, dur int64
-		if err := rows.Scan(&probe, &device, &started, &dur, &status); err != nil {
+		if err := rows.Scan(&probe, &device, &started, &dur, &status, &kind, &phases); err != nil {
 			rows.Close()
 			return res, err
 		}
@@ -126,6 +132,13 @@ func (s *Store) CompactBefore(ctx context.Context, cutoff time.Time, limit int) 
 		if status == "cancelled" {
 			continue
 		}
+		if u := ParseUDP(kind, phases); u != nil {
+			a.udpSent += u.Sent
+			a.udpLost += u.Lost
+			if u.Sent-u.Lost > 1 {
+				a.jitters = append(a.jitters, u.JitterUS)
+			}
+		}
 		a.n++
 		if status == "ok" {
 			a.ok++
@@ -141,20 +154,24 @@ func (s *Store) CompactBefore(ctx context.Context, cutoff time.Time, limit int) 
 	for _, k := range keys {
 		a := aggs[k]
 		sort.Slice(a.durs, func(i, j int) bool { return a.durs[i] < a.durs[j] })
+		sort.Slice(a.jitters, func(i, j int) bool { return a.jitters[i] < a.jitters[j] })
 		fj, _ := json.Marshal(a.fails)
 		var mn, mx *int64
 		if len(a.durs) > 0 {
 			mn, mx = &a.durs[0], &a.durs[len(a.durs)-1]
 		}
 		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO observation_minutes (probe_def_id, device_id, minute_ms, n, ok, failures_json, p50_us, p95_us, min_us, max_us)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			INSERT INTO observation_minutes (probe_def_id, device_id, minute_ms, n, ok, failures_json, p50_us, p95_us, min_us, max_us, udp_sent, udp_lost, jitter_p50_us)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT (probe_def_id, minute_ms) DO UPDATE SET
 				n = n + excluded.n, ok = ok + excluded.ok,
+				udp_sent = udp_sent + excluded.udp_sent, udp_lost = udp_lost + excluded.udp_lost,
+				jitter_p50_us = COALESCE(excluded.jitter_p50_us, jitter_p50_us),
 				p50_us = COALESCE(excluded.p50_us, p50_us), p95_us = MAX(COALESCE(p95_us, 0), COALESCE(excluded.p95_us, 0)),
 				min_us = MIN(COALESCE(min_us, excluded.min_us), COALESCE(excluded.min_us, min_us)),
 				max_us = MAX(COALESCE(max_us, 0), COALESCE(excluded.max_us, 0))`,
-			k.probe, a.device, k.minute, a.n, a.ok, string(fj), pctl(a.durs, 0.5), pctl(a.durs, 0.95), mn, mx); err != nil {
+			k.probe, a.device, k.minute, a.n, a.ok, string(fj), pctl(a.durs, 0.5), pctl(a.durs, 0.95), mn, mx,
+			a.udpSent, a.udpLost, pctl(a.jitters, 0.5)); err != nil {
 			return res, err
 		}
 	}
@@ -224,7 +241,8 @@ func (s *Store) SetMaxPages(ctx context.Context, n int64) error {
 func (s *Store) MinutesBetween(ctx context.Context, from, to time.Time) ([]MinuteRow, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT pd.id, pd.kind, pd.target, e.label, pd.protocol_version, pd.interval_ms,
-		       m.minute_ms, m.n, m.ok, m.failures_json, m.p50_us, m.p95_us, m.min_us, m.max_us
+		       m.minute_ms, m.n, m.ok, m.failures_json, m.p50_us, m.p95_us, m.min_us, m.max_us,
+		       m.udp_sent, m.udp_lost, m.jitter_p50_us
 		FROM observation_minutes m
 		JOIN probe_definitions pd ON pd.id = m.probe_def_id
 		JOIN endpoints e ON e.id = pd.endpoint_id
@@ -239,14 +257,15 @@ func (s *Store) MinutesBetween(ctx context.Context, from, to time.Time) ([]Minut
 		var r MinuteRow
 		var intervalMS, minute int64
 		var fj string
-		var p50, p95, mn, mx sql.NullInt64
+		var p50, p95, mn, mx, jit sql.NullInt64
 		if err := rows.Scan(&r.ProbeDefID, &r.Kind, &r.Target, &r.EndpointLabel, &r.ProtocolVersion, &intervalMS,
-			&minute, &r.N, &r.OK, &fj, &p50, &p95, &mn, &mx); err != nil {
+			&minute, &r.N, &r.OK, &fj, &p50, &p95, &mn, &mx, &r.UDPSent, &r.UDPLost, &jit); err != nil {
 			return nil, err
 		}
 		r.Interval, r.Minute = time.Duration(intervalMS)*time.Millisecond, time.UnixMilli(minute)
 		json.Unmarshal([]byte(fj), &r.Failures)
 		r.P50US, r.P95US, r.MinUS, r.MaxUS = nullable(p50), nullable(p95), nullable(mn), nullable(mx)
+		r.JitterP50US = nullable(jit)
 		out = append(out, r)
 	}
 	return out, rows.Err()

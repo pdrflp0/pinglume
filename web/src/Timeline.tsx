@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import type { Bucket, CoverageState, IncidentListItem, Series, Timeline as TimelineData } from "./api";
-import { duration, failureLabel, kindMeasure, latency, stateLabel, symptomLabel } from "./format";
+import { duration, failureLabel, kindMeasure, kindName, latency, stateLabel, symptomLabel, udpLoss } from "./format";
 import { niceMax, tickLabel, timeTicks } from "./scale";
 
 const M = { left: 56, right: 14 };
@@ -67,6 +67,11 @@ function runs(s: Series, bucketMs: number, gaps: Segment[]): Bucket[][] {
 
 function failures(b: Bucket): number {
   return b.fail ? Object.values(b.fail).reduce((a, v) => a + v, 0) : 0;
+}
+
+function failFraction(b: Bucket): number {
+  if (b.udpSent) return (b.udpLost ?? 0) / b.udpSent;
+  return b.n > 0 ? failures(b) / b.n : 0;
 }
 
 interface Props {
@@ -248,7 +253,7 @@ export function Timeline({ data, incidents, onIncident, onSelect, onZoom, onPan,
                 <strong>{s.endpoint}</strong>
                 <span className="muted">
                   {" "}
-                  · {s.kind.toUpperCase()} v{s.protocolVersion} · {kindMeasure[s.kind] ?? s.kind} · {s.target} · a
+                  · {kindName(s.kind)} v{s.protocolVersion} · {kindMeasure[s.kind] ?? s.kind} · {s.target} · a
                   cada {duration(s.intervalMs)}
                 </span>
               </div>
@@ -301,13 +306,13 @@ export function Timeline({ data, incidents, onIncident, onSelect, onZoom, onPan,
                   );
                 })}
                 <text x={M.left - 8} y={PLOT_H + 6 + FAIL_H - 3} className="tl-axis-label" textAnchor="end">
-                  Falhas
+                  {s.kind === "udp_echo" ? "Perda" : "Falhas"}
                 </text>
                 <line x1={M.left} x2={M.left + plotW} y1={PLOT_H + 6 + FAIL_H} y2={PLOT_H + 6 + FAIL_H} className="tl-grid" />
                 {s.buckets.map((b) => {
-                  const f = failures(b);
-                  if (f === 0) return null;
-                  const h = Math.max(3, (f / b.n) * FAIL_H);
+                  const frac = failFraction(b);
+                  if (frac === 0) return null;
+                  const h = Math.max(3, frac * FAIL_H);
                   return (
                     <rect
                       key={b.t}
@@ -345,7 +350,7 @@ export function Timeline({ data, incidents, onIncident, onSelect, onZoom, onPan,
       </div>
       <p id="tl-help" className="muted small">
         Linha: mediana do tempo da sonda (o título de cada painel diz o que ela mede); faixa clara: até o p95, só
-        execuções bem-sucedidas. Barras de falha: fração das execuções que falharam no trecho. Traço tracejado no
+        execuções bem-sucedidas. Barras de falha: fração das execuções que falharam no trecho (na sonda UDP, fração de datagramas perdidos). Traço tracejado no
         topo do painel: sonda em backoff (intervalo ampliado após falhas seguidas). Áreas hachuradas: sem medição.
         Losango acima da cobertura e linha tracejada: um relato seu (não é medição). Arraste para aproximar. No teclado: ←/→ percorre, Shift+←/→ desloca, + e − aproximam e afastam, Esc volta ao
         vivo.
@@ -431,7 +436,7 @@ function Readout({
           return (
             <li key={s.probeDefId}>
               <span className="tl-readout-name">
-                {s.endpoint} {s.kind.toUpperCase()}
+                {s.endpoint} {kindName(s.kind)}
               </span>
               {b ? (
                 <span>
@@ -442,6 +447,13 @@ function Readout({
                         , {v} {failureLabel[k] ?? k}
                       </span>
                     ))}
+                  {b.udpSent ? (
+                    <>
+                      {" "}
+                      · {udpLoss(b.udpLost ?? 0, b.udpSent)}
+                      {b.jitterUs != null && <> · jitter {latency(b.jitterUs)}</>}
+                    </>
+                  ) : null}
                   {b.p50Us !== null && (
                     <>
                       {" "}

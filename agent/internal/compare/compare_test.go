@@ -258,3 +258,36 @@ func TestPhases(t *testing.T) {
 		t.Fatal("sem resultado antes do fim")
 	}
 }
+
+func TestUDPLossComparedPerBurst(t *testing.T) {
+	ctx := context.Background()
+	f := newFx(t)
+	d, _ := f.st.EnsureProbeDefinition(ctx, store.Endpoint{Label: "ep-1", Host: "h", Owner: "dev"},
+		store.ProbeDefinition{Kind: "udp_echo", Target: "udp", Interval: 10 * time.Second, Timeout: time.Second, ProtocolVersion: 1}, t0)
+	put := func(from, to time.Time, lost func() int) {
+		for ts := from; ts.Before(to); ts = ts.Add(10 * time.Second) {
+			f.seq["udp"]++
+			l := lost()
+			ph := fmt.Sprintf(`{"sent":20,"received":%d,"lost":%d,"jitter_us":200}`, 20-l, l)
+			f.st.InsertObservation(ctx, store.Observation{ID: fmt.Sprintf("u-%d", f.seq["udp"]), DeviceID: f.dev, ProbeDefID: d.ID,
+				Seq: f.seq["udp"], StartedWall: ts, Duration: time.Duration(900+f.rng.IntN(100)) * time.Microsecond, Status: "ok",
+				PhasesJSON: ph, ReceivedAt: ts})
+		}
+	}
+	put(aFrom, aTo, func() int { return 3 + f.rng.IntN(3) })
+	put(bFrom, bTo, func() int { return f.rng.IntN(2) })
+	r := f.compute(f.experiment(nil))
+	u := probe(r, "udp_echo")
+	if u.Failures == nil || u.Failures.Verdict != Better || u.Failures.Estimate > -0.15 {
+		t.Fatalf("perda de ~20%% para ~2%% deveria ser melhora: %+v", u.Failures)
+	}
+	found := false
+	for _, fd := range r.Findings {
+		if strings.Contains(fd.Text, "perda de datagramas UDP") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("texto da perda UDP ausente: %+v", r.Findings)
+	}
+}

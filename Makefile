@@ -29,5 +29,5 @@ dev-server:
 
 dev-agent:
 	agent/bin/pinglume run --data-dir .dev-data \
-		--dev-target ep-1=127.0.0.1:9443 --dev-dns ep-1=127.0.0.1:15353 \
+		--dev-target ep-1=127.0.0.1:9443 --dev-dns ep-1=127.0.0.1:15353 --dev-udp ep-1=127.0.0.1:9443 \
 		--dev-ca testbed/tls/probe-server.pem

@@ -18,10 +18,12 @@ type FaultState struct {
 	HTTPS      string `json:"https"`
 	HTTPSDelay string `json:"httpsDelay"`
 	Listener   string `json:"listener"`
+	UDPLoss    int    `json:"udpLoss"`
+	UDPJitter  string `json:"udpJitter"`
 }
 
 func defaultFaults() FaultState {
-	return FaultState{DNS: "ok", HTTPS: "ok", HTTPSDelay: "0s", Listener: "open"}
+	return FaultState{DNS: "ok", HTTPS: "ok", HTTPSDelay: "0s", Listener: "open", UDPJitter: "0s"}
 }
 
 func (s FaultState) validate() error {
@@ -42,6 +44,12 @@ func (s FaultState) validate() error {
 	case "open", "closed":
 	default:
 		return fmt.Errorf("listener inválido: %q", s.Listener)
+	}
+	if s.UDPLoss < 0 || s.UDPLoss > 100 {
+		return fmt.Errorf("udpLoss deve estar entre 0 e 100: %d", s.UDPLoss)
+	}
+	if d, err := time.ParseDuration(s.UDPJitter); err != nil || d < 0 || d > 5*time.Second {
+		return fmt.Errorf("udpJitter inválido: %q", s.UDPJitter)
 	}
 	return nil
 }
@@ -92,4 +100,9 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(v)
+}
+
+func (f *Faults) udpJitter() time.Duration {
+	d, _ := time.ParseDuration(f.Get().UDPJitter)
+	return d
 }
