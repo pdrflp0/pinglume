@@ -18,7 +18,8 @@ Ferramenta local para investigar falhas intermitentes de internet durante chamad
 | F7 comparação guiada `compare-v1` e detecção do tipo de rede | feito e testado |
 | F8 exportação HTML/JSON com prévia e redação | feito e testado |
 | F9 retenção, compactação e limite de disco | feito e testado |
-| F10 em diante | ver backlog no documento de desenho |
+| F10 modo demonstração separado | feito e testado |
+| F11 em diante | ver backlog no documento de desenho |
 
 ## Rodar localmente
 
@@ -95,6 +96,22 @@ agent/bin/pinglume export --data-dir .dev-data --window 24h --html relatorio.htm
 - Observações dos relatos só entram se você marcar (`--notes`), e passam pelas mesmas substituições.
 - O relatório traz uma tabela do que foi removido, as versões das regras e o método; cada frase de análise vem com as entradas que a sustentam.
 - Cada exportação gerada é um snapshot imutável com SHA-256 do JSON; o HTML cita esse hash. Um arquivo baixado não pode ser revogado.
+
+### Modo demonstração
+
+```bash
+agent/bin/pinglume demo
+```
+
+```bash
+agent/bin/pinglume open --demo
+```
+
+- Gera 3 h de histórico simulado com o roteiro completo (uso normal, agente desligado, degradação com relato "travou agora", comparação Wi-Fi × cabo, pausa, relato sem degradação) e continua ao vivo com uma falha curta a cada 12 minutos. Semente fixa: o resultado é igual a cada execução.
+- Nada vai para a rede: as sondas são simuladas.
+- Usa outro diretório (`Pinglume Demo`) e outra porta (47822), então roda ao lado do agente real. `--demo` funciona em `open`, `status`, `incidents`, `export` e `storage`.
+- Nunca se mistura com dados reais: o banco guarda o modo; `run` recusa um banco de demonstração e `demo` recusa um banco com medições reais. A cada início a demo recria o próprio banco (só depois de confirmar que ele é de demonstração); `--keep` mantém o existente.
+- Identificação: faixa "SIMULAÇÃO" fixa em todas as telas do dashboard (inclusive antes do login), título da aba com "[SIMULAÇÃO]", aviso na CLI `status`, e na exportação `"simulation": true` no JSON, faixa no HTML e arquivo `pinglume-demo-…`.
 
 ### Armazenamento
 

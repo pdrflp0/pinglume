@@ -141,7 +141,7 @@ var page = template.Must(template.New("export").Funcs(funcs).Parse(`<!doctype ht
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<title>Pinglume — relatório {{when .S.Period.From}} a {{when .S.Period.To}}</title>
+<title>{{if .S.Simulation}}[SIMULAÇÃO] {{end}}Pinglume — relatório {{when .S.Period.From}} a {{when .S.Period.To}}</title>
 <style>
 :root{--bg:#fff;--text:#15181d;--muted:#5b6370;--border:#dde1e7;--soft:#f4f6f8;--measuring:#1f8a5b;--paused:#8a6d1f;--suspended:#6b5bb5;--agent_down:#b4432f;--probe_unavailable:#a1561b;--unrecorded:#9aa1ab}
 @media (prefers-color-scheme:dark){:root{--bg:#14171c;--text:#e8ebef;--muted:#9aa3af;--border:#2b313a;--soft:#1c2027;--measuring:#3fbf86;--paused:#d1ad4f;--suspended:#9d8ef0;--agent_down:#f07a63;--probe_unavailable:#e59a5b;--unrecorded:#59616c}}
@@ -152,6 +152,7 @@ h1{font-size:1.4rem;margin:0 0 4px}h2{font-size:1.1rem;margin:32px 0 8px;padding
 .muted{color:var(--muted)}.small{font-size:.85rem}.num{font-variant-numeric:tabular-nums;white-space:nowrap}
 .notice{background:var(--soft);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin:16px 0}
 .notice li{margin:2px 0}
+.simulation{background:#7a2e1f;color:#fff;font-weight:800;letter-spacing:.04em;text-align:center;padding:10px 12px;border-radius:8px;margin:0 0 16px}
 .preview{border:2px dashed var(--agent_down);color:var(--agent_down);font-weight:700;padding:8px 12px;border-radius:8px;margin:12px 0}
 .bar{display:flex;height:16px;border-radius:4px;overflow:hidden;background:var(--border);margin:8px 0}
 .seg{height:100%}
@@ -175,6 +176,7 @@ footer{margin-top:40px;font-size:.8rem;color:var(--muted);word-break:break-all}
 </head>
 <body>
 <main>
+{{if .S.Simulation}}<p class="simulation">SIMULAÇÃO — dados gerados pelo modo demonstração, não são medições reais</p>{{end}}
 <h1>Relatório de conexão — Pinglume</h1>
 <p class="muted">Período: <span class="num">{{when .S.Period.From}}</span> a <span class="num">{{when .S.Period.To}}</span> · gerado em <span class="num">{{when .S.GeneratedAt}}</span> · agente {{.S.AgentVersion}} · {{.S.Device.OS}}/{{.S.Device.Arch}}</p>
 {{if .S.Preview}}<p class="preview">PRÉVIA — este conteúdo ainda não foi gerado como arquivo.</p>{{end}}

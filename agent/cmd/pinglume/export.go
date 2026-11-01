@@ -24,6 +24,7 @@ func cmdExport(args []string) error {
 	noComparisons := fs.Bool("no-comparisons", false, "não incluir comparações")
 	notes := fs.Bool("notes", false, "incluir as observações dos relatos (redigidas)")
 	fs.Parse(args)
+	c.resolve()
 	if *htmlOut == "" && *jsonOut == "" {
 		return errors.New("informe --html e/ou --json com o caminho de saída")
 	}

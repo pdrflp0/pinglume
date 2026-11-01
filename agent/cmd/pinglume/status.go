@@ -10,6 +10,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"pinglume/agent/internal/store"
 	"pinglume/agent/internal/summary"
 )
 
@@ -19,6 +20,7 @@ func cmdStatus(args []string) error {
 	c.register(fs)
 	window := fs.Duration("window", 15*time.Minute, "período resumido")
 	fs.Parse(args)
+	c.resolve()
 
 	ctx := context.Background()
 	st, err := openStore(ctx, c.dataDir)
@@ -27,6 +29,10 @@ func cmdStatus(args []string) error {
 	}
 	defer st.Close()
 
+	if mode, err := st.Mode(ctx); err == nil && mode == store.ModeDemo {
+		fmt.Println("*** MODO DEMONSTRAÇÃO: dados simulados, não são medições reais ***")
+		fmt.Println()
+	}
 	now := time.Now()
 	s, err := summary.Build(ctx, st, now.Add(-*window), now, summary.Options{})
 	if err != nil {

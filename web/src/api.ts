@@ -37,6 +37,7 @@ export interface Probe {
 
 export interface Status {
   agentVersion: string;
+  mode: "real" | "demo";
   state: CoverageState;
   now: string;
   summary: {
@@ -307,6 +308,7 @@ export const api = {
   startIntervention: (id: string, condition: string) =>
     call<Experiment>("POST", `/api/v1/experiments/${encodeURIComponent(id)}/intervention`, { condition }),
   cancelExperiment: (id: string) => call<Experiment>("POST", `/api/v1/experiments/${encodeURIComponent(id)}/cancel`),
+  mode: () => call<{ mode: "real" | "demo" }>("GET", "/api/v1/mode"),
   storage: () => call<StorageInfo>("GET", "/api/v1/storage"),
   exports: () => call<ExportMeta[]>("GET", "/api/v1/exports"),
   createExport: (o: ExportOptions) => call<ExportMeta>("POST", "/api/v1/exports", o),

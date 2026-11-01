@@ -68,6 +68,7 @@ func cmdPause(args []string, pause bool) error {
 	var c common
 	c.register(fs)
 	fs.Parse(args)
+	c.resolve()
 
 	var resp struct{ State string }
 	if err := apiCall(c, "POST", "/api/v1/"+name, &resp); err != nil {
@@ -88,6 +89,7 @@ func cmdOpen(args []string) error {
 	c.register(fs)
 	printOnly := fs.Bool("print", false, "só imprime o endereço, sem abrir o navegador")
 	fs.Parse(args)
+	c.resolve()
 
 	var resp struct{ Code string }
 	if err := apiCall(c, "POST", "/api/v1/auth/codes", &resp); err != nil {
