@@ -10,7 +10,7 @@ Ferramenta local para investigar falhas intermitentes de internet durante chamad
 | --- | --- |
 | F0 repositório e toolchain | feito |
 | F1 sonda TCP → SQLite → `pinglume status` | feito e testado |
-| F2 cobertura: heartbeat, agente parado, suspensão, pausa | feito; suspensão testada só com relógio simulado |
+| F2 cobertura: heartbeat, agente parado, suspensão, pausa | feito; suspensão conferida com o log de energia do macOS (97 de 97 sonos detectados) |
 | F3 API local segura + dashboard servido pelo agente | feito e testado |
 | F4 linha do tempo com lacunas, zoom, teclado e tabela equivalente | feito e testado |
 | F5 sondas DNS e HTTPS, backoff e injeção de falhas no probe-server | feito e testado |
@@ -19,7 +19,8 @@ Ferramenta local para investigar falhas intermitentes de internet durante chamad
 | F8 exportação HTML/JSON com prévia e redação | feito e testado |
 | F9 retenção, compactação e limite de disco | feito e testado |
 | F10 modo demonstração separado | feito e testado |
-| F11 em diante | ver backlog no documento de desenho |
+| F11 medição de recursos (CPU, memória, tráfego, disco) | feito: [docs/medicoes-recursos.md](docs/medicoes-recursos.md) |
+| F12 em diante | ver backlog no documento de desenho |
 
 ## Rodar localmente
 
@@ -160,6 +161,16 @@ curl -X PUT -d '{"listener":"open","https":"ok","httpsDelay":"0s"}' http://127.0
 
 O certificado autoassinado do testbed é criado em `testbed/tls/` na primeira execução (fora do git) e fixado pelo agente com `--dev-ca`.
 
+## Medição de recursos
+
+```bash
+make build
+testbed/measure/measure.sh 1440 .measure/24h-$(date +%Y%m%d-%H%M)
+go -C testbed/measure run ./summarize .measure/<pasta>
+```
+
+O roteiro sobe 3 probe-servers e um agente com os intervalos padrão, amostra CPU, memória (`ps`), dados no socket (`nettop`) e tamanho lógico do banco uma vez por minuto e, no fim, extrai do banco as contagens, a cobertura e as lacunas de suspensão, além dos eventos de sono do `pmset -g log`. Use `.measure/` (fora do git): o macOS apaga `/private/tmp` depois de alguns dias. Resultado publicado: [docs/medicoes-recursos.md](docs/medicoes-recursos.md), dados brutos em [docs/medicoes/](docs/medicoes/).
+
 ## Desenvolvimento
 
 Branches, versionamento (SemVer) e convenção de commits: [docs/fluxo-git.md](docs/fluxo-git.md). Histórico de versões: [CHANGELOG.md](CHANGELOG.md).
@@ -179,14 +190,14 @@ Branches, versionamento (SemVer) e convenção de commits: [docs/fluxo-git.md](d
 - `VACUUM` bloqueia gravações enquanto roda; ele só é usado quando há mais de 25% de espaço livre no arquivo ou o limite foi ultrapassado.
 - A prévia em quadro (iframe) não pôde ser verificada no navegador embutido do app, que bloqueia quadros; o link "Abrir prévia em nova aba" foi verificado.
 - Alvos de desenvolvimento precisam ser loopback ou rede privada; o agente recusa outros.
-- A detecção de suspensão compara relógio civil e monotônico. Ela não distingue sono de relógio adiantado manualmente (o motivo registrado diz isso) e ainda não foi validada com o Mac dormindo de verdade.
+- A detecção de suspensão compara relógio civil e monotônico, com limiar de 5 s. Na medição de 24 h ela acertou os 97 períodos de sono do log de energia do macOS (diferença máxima de 10 s), mas isso vale para um Mac e um período; sono mais curto que o limiar não é detectado, e relógio adiantado manualmente continua indistinguível de sono (o motivo registrado diz isso).
 - Depois de um crash, a lacuna começa no último heartbeat (a cada 5 s): o instante exato da queda tem até 5 s de incerteza.
 - A linha do tempo usa escala linear compartilhada entre as sondas: um pico grande achata as demais. Escala logarítmica fica para depois do uso real.
 - Os trechos (baldes) têm tamanho período ÷ 300; em 7 dias, cada trecho cobre ~34 min e a mediana esconde picos curtos dentro dele.
 - Eventos do sistema (início/parada do agente) já vêm da API, mas ainda não aparecem como marcas no gráfico.
 - Sessões do navegador ficam em memória: reiniciar o agente exige `pinglume open` de novo.
 - Em largura de celular, a tabela de sondas rola horizontalmente dentro do cartão.
-- Nenhum número de desempenho foi publicado; medições de recursos são a fatia F11.
+- A medição de recursos foi feita num único Mac (M2), com endpoints em loopback e o computador suspenso ~78% do período; CPU e memória vêm de ~4,4 h acordado. Cabeçalhos TCP/IP são estimados por modelo, não capturados.
 
 ## Segurança da API local
 
