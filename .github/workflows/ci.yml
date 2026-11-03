@@ -24,7 +24,7 @@ jobs:
           go-version-file: agent/go.mod
           cache-dependency-path: agent/go.sum
       - name: gofmt
-        run: test -z "$(gofmt -l agent probe-server)" || (gofmt -l agent probe-server; exit 1)
+        run: test -z "$(gofmt -l agent probe-server testbed)" || (gofmt -l agent probe-server testbed; exit 1)
       - name: vet
         run: make vet
       - name: testes do agente (com detector de corrida)
