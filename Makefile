@@ -19,6 +19,7 @@ test:
 vet:
 	cd agent && go vet ./...
 	cd probe-server && go vet ./...
+	cd testbed/measure && go vet ./... && go build -o /dev/null ./summarize
 
 clean:
 	rm -rf agent/bin probe-server/bin
