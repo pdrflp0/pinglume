@@ -4,6 +4,59 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); 
 
 ## [Não publicado]
 
+## [0.6.0] - 2026-11-02
+
+Fatia F11: medição de recursos do agente com 24 h reais no testbed local, publicada com os dados brutos e o gerador do relatório. A mesma medição serviu para conferir, pela primeira vez com sono real, a detecção de suspensão. Resultado completo: [docs/medicoes-recursos.md](docs/medicoes-recursos.md). O Nível 1 ainda não está completo: falta a sonda UDP (F12).
+
+### Adicionado
+
+**Roteiro de medição (`testbed/measure/`)**
+
+- `measure.sh <minutos> <pasta>`: sobe 3 probe-servers e um agente com os intervalos padrão (TCP 10 s, DNS 30 s, HTTPS 60 s por endpoint) e amostra uma vez por minuto memória residente e tempo de CPU (`ps`), dados no socket numa janela de 60 s (`nettop`) e tamanho lógico do banco (páginas usadas menos páginas livres; somar o arquivo WAL não mede crescimento). Copia os binários usados para a pasta da medição.
+- `collect.sh <pasta>`: ao final, com o agente já encerrado, extrai do banco as execuções por sonda, o tempo por estado de cobertura e as lacunas de suspensão, e do `pmset -g log` os eventos `Sleep`, `Wake` e `DarkWake` (só data e tipo; linhas `Wake Requests` são agendamentos e ficam fora).
+- `summarize <pasta>`: gera o relatório em Markdown com ambiente, resultados, modelo de cabeçalhos TCP/IP explícito, comparação com as metas do desenho, conferência da suspensão e limites.
+- Pasta `.measure/` fora do git para ensaios longos (o macOS apaga `/private/tmp` depois de alguns dias).
+
+**Resultado da medição de 24 h** (Mac M2, macOS 26.6.2, 01/11 19:33 a 02/11 19:34)
+
+| Recurso | Medido | Meta |
+| --- | --- | --- |
+| CPU, média | 0,069% de um núcleo (pior minuto 0,133%) | — |
+| Memória residente | 19,3 MB em média, 23,7 MB no máximo | — |
+| Tráfego com cabeçalhos | ~1,27 MB/h (0,74 MB/h medido no socket + 0,53 MB/h de cabeçalhos por modelo) | ≤ 5 MB/h |
+| Disco | 224 B por execução; 58 MB projetados em 7 dias medindo sem parar | ~65 MB |
+| Execuções | 1619/h enquanto medindo (esperado: 1620/h), todas `ok` | — |
+
+- Dados brutos em `docs/medicoes/2026-11-01-24h/` (`env.txt`, `samples.csv`, `counts.csv`, `coverage.csv`, `suspended.csv` e `pmset.csv` recortado para a janela da medição). O relatório se regenera com `go -C testbed/measure run ./summarize docs/medicoes/2026-11-01-24h`.
+
+**Detecção de suspensão conferida com sono real**
+
+- O Mac ficou suspenso 18,78 h das 24,01 h, em 97 períodos (muitos são despertares curtos de manutenção do macOS). Cada lacuna `suspended` gravada pelo agente foi comparada aos períodos `Sleep` → `Wake`/`DarkWake` do log de energia, com tolerância de 15 s: **97 de 97 detectados, nenhuma lacuna sem sono correspondente**, diferença máxima de 10 s no início e 5 s no fim. O período mais curto tinha 18 s.
+
+### Alterado
+
+- `make vet` e o `gofmt` da CI passam a cobrir `testbed/measure`.
+- README: F11 marcada como feita, seção de como medir e limites atualizados.
+
+### Corrigido
+
+Corrigido durante o desenvolvimento desta versão, antes de publicar:
+
+- O primeiro relatório dividia execuções e cabeçalhos pelas 24 h de relógio (353 execuções/h) e os dados no socket pelas horas acordadas: bases diferentes na mesma tabela. Agora tudo usa o tempo "medindo" registrado pelo próprio agente (5,23 h).
+- Os dados no socket somavam as 291 janelas de 60 s do `nettop` e dividiam por 246 intervalos acordados, o que inflava a taxa em ~18%. Agora cada amostra vale 60 s.
+- O disco projetado era o crescimento ÷ horas amostradas, que ignorava os despertares curtos entre amostras (o agente mede neles) e saía 69 MB, acima da meta. Agora é bytes por execução × execuções por hora medindo: 58 MB.
+- A primeira versão da conferência de suspensão tratava `Wake Requests` (agendamento de despertar, no mesmo segundo do `Sleep`) como despertar e dava 0 de 97. O filtro exclui essas linhas.
+
+### Limites conhecidos
+
+- Um único Mac e um único período. Endpoints em loopback: mede o custo do agente, não a latência da internet.
+- Computador suspenso ~78% do tempo: CPU e memória vêm de ~4,4 h de minutos acordados amostrados, e a maior parte dos despertares foi curta, quando o agente recupera as sondas atrasadas.
+- CPU e memória amostradas uma vez por minuto; picos mais curtos podem não aparecer.
+- Cabeçalhos TCP/IP por modelo (pacotes por execução × tamanho), não por captura de pacotes.
+- A conferência de suspensão vale para este Mac neste período. Sono mais curto que o limiar (5 s) não é detectado, e relógio adiantado manualmente continua indistinguível de sono.
+- A sonda UDP (F12) não está incluída na medição.
+- Seguem valendo os limites anteriores.
+
 ## [0.5.0] - 2026-11-01
 
 Fatia F10: modo demonstração separado e claramente identificado. Permite mostrar o Pinglume inteiro sem rede, sem testbed e sem misturar nada com medições reais. O Nível 1 ainda não está completo: faltam medição de recursos (F11) e sonda UDP (F12).
@@ -258,7 +311,8 @@ Primeira versão. Nível 1 ainda incompleto: só existe a sonda TCP, e ela mede 
 - Sem sondas DNS/HTTPS/UDP, incidentes, comparação guiada, exportação, retenção ou modo demo (fatias F5–F12).
 - Nenhuma medição de recursos (CPU, memória, tráfego) publicada ainda.
 
-[Não publicado]: https://github.com/pdrflp0/pinglume/compare/v0.5.0...develop
+[Não publicado]: https://github.com/pdrflp0/pinglume/compare/v0.6.0...develop
+[0.6.0]: https://github.com/pdrflp0/pinglume/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/pdrflp0/pinglume/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/pdrflp0/pinglume/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/pdrflp0/pinglume/compare/v0.2.0...v0.3.0
