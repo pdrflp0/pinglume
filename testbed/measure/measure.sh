@@ -52,5 +52,8 @@ while (( $(date +%s) < END )); do
   echo "$(date +%s),$RSS,$CPU_S,${NET:-0,0},$DB" >> "$OUT/samples.csv"
 done
 
-sqlite3 -csv "$OUT/data/pinglume.db" "SELECT pd.kind, COUNT(*) FROM observations o JOIN probe_definitions pd ON pd.id = o.probe_def_id WHERE o.status != 'cancelled' GROUP BY pd.kind; SELECT 'span_ms', MAX(started_wall_ms) - MIN(started_wall_ms) FROM observations" > "$OUT/counts.csv"
+kill -INT "$AGENT" 2>/dev/null || true
+for _ in {1..50}; do kill -0 "$AGENT" 2>/dev/null || break; sleep 0.1; done
+AGENT=
+"${0:A:h}/collect.sh" "$OUT"
 echo "fim=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$OUT/env.txt"
