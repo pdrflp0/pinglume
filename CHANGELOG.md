@@ -10,8 +10,17 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); 
 - `probe-server`: eco UDP (`-udp`) que só responde pacotes pequenos com a assinatura da sonda (sem amplificação), com limite por IP e falhas simuláveis `udpLoss` (0–100%) e `udpJitter`.
 - Perda e jitter UDP em todo o fluxo: resumo, linha do tempo (faixa "Perda"), compactação por minuto (migração 007), `incident-v1` (degradação quando a perda de datagramas supera a base em mais de 2 p.p.), `compare-v1` (perda por rajada com intervalo de 95%), exportação, CLI e dashboard; sempre rotulada como perda de datagramas da sonda, nunca como perda de pacotes IP.
 
+### Alterado
+
+- `testbed/measure/measure.sh`: cada probe-server ganha porta UDP própria (`-udp 127.0.0.1:945x`; sem isso os três disputavam a porta UDP padrão) e o agente mede o eco UDP em um endpoint (`--dev-udp ep-1=…`). O `env.txt` registra as execuções esperadas por hora (1860 com UDP).
+- `summarize`: inclui `udp_echo` no modelo de cabeçalhos (40 pacotes por rajada: 20 datagramas e 20 ecos, 28 B cada) e usa as execuções esperadas do `env.txt`.
+- `probe-server`: a linha "probe-server pronto" do log passa a mostrar o endereço do eco UDP.
+- `summarize`: os limites sobre sono só aparecem quando a medição teve suspensão.
+- Rodada indicativa de 30 min com a sonda UDP ativa (02/11 23:24 a 03/11 00:10; o Mac dormiu ~16 min no meio, excluídos das taxas): [docs/medicoes-recursos-udp.md](docs/medicoes-recursos-udp.md), dados brutos em `docs/medicoes/2026-11-02-30m-udp/`. Tráfego total ~2,1 MB/h (1,3 MB/h no socket + 0,8 MB/h de cabeçalhos por modelo; meta ≤ 5 MB/h), CPU 0,100% de um núcleo, memória 17,4 MB em média (máx. 23,3 MB), 1864 execuções/h para 1860 esperadas, todas `ok`. A primeira amostra bate com o modelo: o UDP soma exatamente 5120 B/min em cada sentido (4 rajadas × 20 × 64 B). Disco: 218 B por execução, **65,1 MB projetados em 7 dias, no limite da meta de ~65 MB**; com o UDP o conjunto padrão deixa de ter folga de disco. 2 de 2 sonos detectados (diferença máxima 3 s / 2 s).
+
 ### Corrigido
 
+- `measure.sh` passa a usar `nettop -d` (delta entre amostras). Sem `-d`, o `nettop` informa cada fluxo com o total desde que ele abriu: sondas abrem e fecham conexões a cada execução e eram contadas certo, mas uma conexão longa (por exemplo, o dashboard aberto no navegador, servido pelo próprio agente) era recontada a cada minuto. Isso apareceu numa rodada de teste com o dashboard aberto (82 MB/h de saída) e foi confirmado com um servidor HTTP keep-alive: sem `-d`, 133 → 280 → 401 KB em amostras seguidas; com `-d`, só o delta. A medição de 24 h da v0.6.0 não muda: os valores constantes ao longo das 24 h descartam fluxos longos, e com fluxos curtos os dois modos dão o mesmo número.
 - O agendador descontava do intervalo a duração reportada pela sonda, e não o tempo decorrido; na sonda UDP, que reporta o RTT mediano (~0,2 ms) mas leva ~1,4 s por rajada, cada ciclo ficava mais longo e a cobertura caía para ~81%. Agora o agendador mede o tempo decorrido.
 
 ## [0.6.0] - 2026-11-02

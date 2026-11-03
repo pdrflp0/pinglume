@@ -19,7 +19,7 @@ Ferramenta local para investigar falhas intermitentes de internet durante chamad
 | F8 exportação HTML/JSON com prévia e redação | feito e testado |
 | F9 retenção, compactação e limite de disco | feito e testado |
 | F10 modo demonstração separado | feito e testado |
-| F11 medição de recursos (CPU, memória, tráfego, disco) | feito: [docs/medicoes-recursos.md](docs/medicoes-recursos.md) |
+| F11 medição de recursos (CPU, memória, tráfego, disco) | feito: [24 h sem UDP](docs/medicoes-recursos.md), [30 min com UDP](docs/medicoes-recursos-udp.md) |
 | F12 sonda UDP de perda e jitter | feito e testado |
 | Nível 2 em diante | ver backlog no documento de desenho |
 
@@ -170,7 +170,7 @@ testbed/measure/measure.sh 1440 .measure/24h-$(date +%Y%m%d-%H%M)
 go -C testbed/measure run ./summarize .measure/<pasta>
 ```
 
-O roteiro sobe 3 probe-servers e um agente com os intervalos padrão, amostra CPU, memória (`ps`), dados no socket (`nettop`) e tamanho lógico do banco uma vez por minuto e, no fim, extrai do banco as contagens, a cobertura e as lacunas de suspensão, além dos eventos de sono do `pmset -g log`. Use `.measure/` (fora do git): o macOS apaga `/private/tmp` depois de alguns dias. Resultado publicado: [docs/medicoes-recursos.md](docs/medicoes-recursos.md), dados brutos em [docs/medicoes/](docs/medicoes/).
+O roteiro sobe 3 probe-servers e um agente com os intervalos padrão, amostra CPU, memória (`ps`), dados no socket (`nettop`) e tamanho lógico do banco uma vez por minuto e, no fim, extrai do banco as contagens, a cobertura e as lacunas de suspensão, além dos eventos de sono do `pmset -g log`. Use `.measure/` (fora do git): o macOS apaga `/private/tmp` depois de alguns dias. Resultados publicados: [24 h sem a sonda UDP](docs/medicoes-recursos.md) e [rodada indicativa de 30 min com a sonda UDP](docs/medicoes-recursos-udp.md); dados brutos em [docs/medicoes/](docs/medicoes/).
 
 ## Desenvolvimento
 

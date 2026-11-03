@@ -106,7 +106,7 @@ func main() {
 		go admin.ListenAndServe()
 	}
 
-	logger.Info("probe-server pronto", "tcp+https", *addr, "dns", *dnsAddr, "zona", *zone,
+	logger.Info("probe-server pronto", "tcp+https", *addr, "udp", *udpAddr, "dns", *dnsAddr, "zona", *zone,
 		"admin", *adminAddr, "certificado", certPath)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
