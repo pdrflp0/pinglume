@@ -2,7 +2,7 @@
 
 Ferramenta local para investigar falhas intermitentes de internet durante chamadas: registra medições pequenas ao longo do tempo, marca quando houve medição e quando não houve, e guia comparações antes/depois.
 
-**Estado:** em desenvolvimento, Nível 1. Ainda não há endpoints públicos hospedados; o agente só mede o `probe-server` local (testbed). Desenho completo em [docs/00-desenho-inicial.md](docs/00-desenho-inicial.md).
+**Estado:** Nível 1 completo (fatias F0–F12), ainda sem uso real. Ainda não há endpoints públicos hospedados; o agente só mede o `probe-server` local (testbed). Desenho completo em [docs/00-desenho-inicial.md](docs/00-desenho-inicial.md).
 
 ## O que existe hoje
 
@@ -19,8 +19,9 @@ Ferramenta local para investigar falhas intermitentes de internet durante chamad
 | F8 exportação HTML/JSON com prévia e redação | feito e testado |
 | F9 retenção, compactação e limite de disco | feito e testado |
 | F10 modo demonstração separado | feito e testado |
-| F11 medição de recursos (CPU, memória, tráfego, disco) | feito: [docs/medicoes-recursos.md](docs/medicoes-recursos.md) |
-| F12 em diante | ver backlog no documento de desenho |
+| F11 medição de recursos (CPU, memória, tráfego, disco) | feito: [24 h sem UDP](docs/medicoes-recursos.md), [30 min com UDP](docs/medicoes-recursos-udp.md) |
+| F12 sonda UDP de perda e jitter | feito e testado |
+| Nível 2 em diante | ver backlog no documento de desenho |
 
 ## Rodar localmente
 
@@ -169,7 +170,7 @@ testbed/measure/measure.sh 1440 .measure/24h-$(date +%Y%m%d-%H%M)
 go -C testbed/measure run ./summarize .measure/<pasta>
 ```
 
-O roteiro sobe 3 probe-servers e um agente com os intervalos padrão, amostra CPU, memória (`ps`), dados no socket (`nettop`) e tamanho lógico do banco uma vez por minuto e, no fim, extrai do banco as contagens, a cobertura e as lacunas de suspensão, além dos eventos de sono do `pmset -g log`. Use `.measure/` (fora do git): o macOS apaga `/private/tmp` depois de alguns dias. Resultado publicado: [docs/medicoes-recursos.md](docs/medicoes-recursos.md), dados brutos em [docs/medicoes/](docs/medicoes/).
+O roteiro sobe 3 probe-servers e um agente com os intervalos padrão, amostra CPU, memória (`ps`), dados no socket (`nettop`) e tamanho lógico do banco uma vez por minuto e, no fim, extrai do banco as contagens, a cobertura e as lacunas de suspensão, além dos eventos de sono do `pmset -g log`. Use `.measure/` (fora do git): o macOS apaga `/private/tmp` depois de alguns dias. Resultados publicados: [24 h sem a sonda UDP](docs/medicoes-recursos.md) e [rodada indicativa de 30 min com a sonda UDP](docs/medicoes-recursos-udp.md); dados brutos em [docs/medicoes/](docs/medicoes/).
 
 ## Desenvolvimento
 
@@ -179,7 +180,7 @@ Branches, versionamento (SemVer) e convenção de commits: [docs/fluxo-git.md](d
 
 - No testbed, a sonda DNS consulta o servidor de teste diretamente (`--dev-dns`). Em produção ela usará o resolvedor do sistema; as duas são definições diferentes e nunca se comparam.
 - Em backoff (até 8× o intervalo), a volta de uma sonda demora mais para aparecer: no ensaio, o DNS restaurado só foi medido ~22 s depois.
-- Sonda UDP (perda e jitter) é a fatia F12.
+- A sonda UDP (`--dev-udp`) envia rajadas de 20 datagramas de 64 B a cada 20 ms (ritmo de áudio de chamada) e mede RTT, perda de datagramas e jitter. É perda de datagramas da sonda, não perda geral de pacotes IP. Por padrão roda a cada 15 s; é a sonda que mais gera tráfego, então é recomendada em um endpoint só.
 - Os limiares da `incident-v1` (50% de cobertura, latência 2× a mediana e acima do p95 da base, 10 execuções ok de base) são escolhas iniciais, ainda não calibradas com uso real.
 - A `incident-v1` ainda não usa o tipo de rede: a linha de base compara com as 2 h anteriores mesmo que a rede tenha mudado (os eventos `net_change` já são gravados).
 - A comparação tem uma rodada A→B: mudança e horário se confundem, e o resultado sempre diz isso. Blocos repetidos (A-B-A) ficam para o Nível 2.

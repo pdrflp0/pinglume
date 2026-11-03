@@ -11,14 +11,17 @@ import (
 )
 
 type Bucket struct {
-	T      int64          `json:"t"`
-	N      int            `json:"n"`
-	OK     int            `json:"ok"`
-	Fail   map[string]int `json:"fail,omitempty"`
-	P50US  *int64         `json:"p50Us"`
-	P95US  *int64         `json:"p95Us"`
-	MaxUS  *int64         `json:"maxUs"`
-	Approx bool           `json:"approx,omitempty"`
+	T        int64          `json:"t"`
+	N        int            `json:"n"`
+	OK       int            `json:"ok"`
+	Fail     map[string]int `json:"fail,omitempty"`
+	P50US    *int64         `json:"p50Us"`
+	P95US    *int64         `json:"p95Us"`
+	MaxUS    *int64         `json:"maxUs"`
+	Approx   bool           `json:"approx,omitempty"`
+	UDPSent  int            `json:"udpSent,omitempty"`
+	UDPLost  int            `json:"udpLost,omitempty"`
+	JitterUS *int64         `json:"jitterUs,omitempty"`
 }
 
 type Series struct {
@@ -72,6 +75,7 @@ func Build(ctx context.Context, st *store.Store, from, to time.Time, n int, live
 		oks      []time.Duration
 		p50, p95 []stats.Weighted
 		max      *int64
+		jitter   []stats.Weighted
 	}
 	bySeries := map[string]*Series{}
 	accs := map[string]map[int64]*acc{}
@@ -92,6 +96,13 @@ func Build(ctx context.Context, st *store.Store, from, to time.Time, n int, live
 			accs[r.ProbeDefID][idx] = a
 		}
 		a.b.N++
+		if r.UDP != nil {
+			a.b.UDPSent += r.UDP.Sent
+			a.b.UDPLost += r.UDP.Lost
+			if r.UDP.Sent-r.UDP.Lost > 1 {
+				a.jitter = append(a.jitter, stats.Weighted{Value: r.UDP.JitterUS, Weight: 1})
+			}
+		}
 		if r.Status == "ok" {
 			a.b.OK++
 			a.oks = append(a.oks, r.Duration)
@@ -125,6 +136,11 @@ func Build(ctx context.Context, st *store.Store, from, to time.Time, n int, live
 			accs[m.ProbeDefID][idx] = a
 		}
 		a.b.Approx = true
+		a.b.UDPSent += m.UDPSent
+		a.b.UDPLost += m.UDPLost
+		if m.JitterP50US != nil {
+			a.jitter = append(a.jitter, stats.Weighted{Value: *m.JitterP50US, Weight: m.OK})
+		}
 		a.b.N += m.N
 		a.b.OK += m.OK
 		for k, v := range m.Failures {
@@ -178,6 +194,7 @@ func Build(ctx context.Context, st *store.Store, from, to time.Time, n int, live
 				m := a.oks[len(a.oks)-1].Microseconds()
 				a.b.MaxUS = &m
 			}
+			a.b.JitterUS = stats.Quantile(a.jitter, 0.5)
 			s.Buckets = append(s.Buckets, a.b)
 		}
 		tl.Series = append(tl.Series, *s)

@@ -18,7 +18,8 @@ import (
 )
 
 type probeConfig struct {
-	targets, resolvers          devTargets
+	targets, resolvers, udps    devTargets
+	udpInterval, udpWait        time.Duration
 	tcpInterval, tcpTimeout     time.Duration
 	httpsInterval, httpsTimeout time.Duration
 	dnsInterval, dnsTimeout     time.Duration
@@ -29,7 +30,8 @@ func (c probeConfig) validate() error {
 	for _, p := range []struct {
 		name              string
 		interval, timeout time.Duration
-	}{{"tcp", c.tcpInterval, c.tcpTimeout}, {"https", c.httpsInterval, c.httpsTimeout}, {"dns", c.dnsInterval, c.dnsTimeout}} {
+	}{{"tcp", c.tcpInterval, c.tcpTimeout}, {"https", c.httpsInterval, c.httpsTimeout}, {"dns", c.dnsInterval, c.dnsTimeout},
+		{"udp", c.udpInterval, udpBurstCount*udpBurstSpacing + c.udpWait}} {
 		if p.timeout <= 0 || p.timeout >= p.interval {
 			return fmt.Errorf("%s-timeout precisa ser positivo e menor que %s-interval", p.name, p.name)
 		}
@@ -55,6 +57,11 @@ func loadPinnedCA(path string) (*x509.CertPool, string, error) {
 	sum := sha256.Sum256(cert.Raw)
 	return pool, hex.EncodeToString(sum[:8]), nil
 }
+
+const (
+	udpBurstCount   = 20
+	udpBurstSpacing = 20 * time.Millisecond
+)
 
 func params(v any) string {
 	b, _ := json.Marshal(v)
@@ -107,6 +114,15 @@ func buildJobs(ctx context.Context, st *store.Store, c probeConfig, now time.Tim
 			probe.DNSResolve{Zone: c.zone, Resolver: addr, Timeout: c.dnsTimeout},
 			"<nonce>."+c.zone, c.dnsInterval, c.dnsTimeout,
 			params(map[string]string{"resolver": addr, "zone": c.zone})); err != nil {
+			return nil, err
+		}
+	}
+	for _, u := range c.udps {
+		addr := u.Addr.String()
+		if err := add(u.Label, u.Addr.Addr().String(),
+			probe.UDPEcho{Addr: addr, Count: udpBurstCount, Spacing: udpBurstSpacing, Wait: c.udpWait},
+			addr, c.udpInterval, udpBurstCount*udpBurstSpacing+c.udpWait,
+			params(map[string]any{"count": udpBurstCount, "spacingMs": udpBurstSpacing.Milliseconds(), "bytes": 64})); err != nil {
 			return nil, err
 		}
 	}

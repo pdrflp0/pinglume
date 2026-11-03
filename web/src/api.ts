@@ -32,6 +32,10 @@ export interface Probe {
 
   backoffMs: number;
   approximate: boolean;
+  udpSent?: number;
+  udpLost?: number;
+  udpLossRate?: number;
+  jitterP50Us?: number | null;
   lastStarted: string;
 }
 
@@ -58,6 +62,9 @@ export interface Bucket {
   p95Us: number | null;
   maxUs: number | null;
   approx?: boolean;
+  udpSent?: number;
+  udpLost?: number;
+  jitterUs?: number | null;
 }
 
 export interface Series {

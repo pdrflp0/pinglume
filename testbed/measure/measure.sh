@@ -17,7 +17,7 @@ trap cleanup EXIT INT TERM
 
 SERVERS=()
 for i in 1 2 3; do
-  "$OUT/bin/probe-server" -tcp 127.0.0.1:945$i -dns 127.0.0.1:1536$i -admin 127.0.0.1:996$i -tls-dir "$OUT/tls" > "$OUT/probe-server-$i.log" 2>&1 &
+  "$OUT/bin/probe-server" -tcp 127.0.0.1:945$i -udp 127.0.0.1:945$i -dns 127.0.0.1:1536$i -admin 127.0.0.1:996$i -tls-dir "$OUT/tls" > "$OUT/probe-server-$i.log" 2>&1 &
   SERVERS+=($!)
   for _ in {1..50}; do [[ -f "$OUT/tls/probe-server.pem" ]] && break; sleep 0.1; done
 done
@@ -25,6 +25,7 @@ done
 "$OUT/bin/pinglume" run --data-dir "$OUT/data" --port 47850 \
   --dev-target ep-1=127.0.0.1:9451 --dev-target ep-2=127.0.0.1:9452 --dev-target ep-3=127.0.0.1:9453 \
   --dev-dns ep-1=127.0.0.1:15361 --dev-dns ep-2=127.0.0.1:15362 --dev-dns ep-3=127.0.0.1:15363 \
+  --dev-udp ep-1=127.0.0.1:9451 \
   --dev-ca "$OUT/tls/probe-server.pem" > "$OUT/agent.log" 2>&1 &
 AGENT=$!
 sleep 2
@@ -38,14 +39,15 @@ sleep 2
   echo "go=$(go version | awk '{print $3}')"
   echo "agente=$("$OUT/bin/pinglume" version | awk '{print $2}')"
   echo "commit=$(git -C "$ROOT" rev-parse --short HEAD)"
-  echo "sondas=3 endpoints × (tcp a cada 10 s, dns a cada 30 s, https a cada 60 s), intervalos padrão"
+  echo "sondas=3 endpoints × (tcp a cada 10 s, dns a cada 30 s, https a cada 60 s) + udp_echo a cada 15 s em 1 endpoint, intervalos padrão"
+  echo "esperado_h=1860"
 } > "$OUT/env.txt"
 
 echo "ts,rss_kb,cpu_s,bytes_in,bytes_out,db_bytes" > "$OUT/samples.csv"
 END=$(( $(date +%s) + MINUTES * 60 ))
 while (( $(date +%s) < END )); do
   kill -0 "$AGENT" 2>/dev/null || { echo "agente parou" >> "$OUT/env.txt"; break; }
-  NET=$(nettop -P -L 2 -s 60 -p "$AGENT" -x -J bytes_in,bytes_out 2>/dev/null | awk -F, 'NR==4 {print $2","$3}')
+  NET=$(nettop -P -d -L 2 -s 60 -p "$AGENT" -x -J bytes_in,bytes_out 2>/dev/null | awk -F, 'NR==4 {print $2","$3}')
   read RSS CPU <<< "$(ps -o rss=,time= -p "$AGENT")"
   CPU_S=$(echo "$CPU" | awk -F'[:.]' '{ if (NF==3) print $1*60+$2+$3/100; else print $1*3600+$2*60+$3+$4/100 }')
   DB=$(sqlite3 "$OUT/data/pinglume.db" "SELECT (SELECT page_count FROM pragma_page_count()) - (SELECT freelist_count FROM pragma_freelist_count()); SELECT page_size FROM pragma_page_size();" | paste -sd' ' - | awk '{print $1*$2}')

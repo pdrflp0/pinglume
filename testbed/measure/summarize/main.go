@@ -24,9 +24,10 @@ var headerModel = map[string]struct {
 	bytes   int
 	desc    string
 }{
-	"tcp":   {7, 52, "SYN, SYN-ACK, ACK, FIN, ACK, FIN, ACK"},
-	"https": {14, 52, "7 de controle TCP + ~7 segmentos de TLS e HTTP"},
-	"dns":   {2, 28, "consulta e resposta UDP"},
+	"tcp":      {7, 52, "SYN, SYN-ACK, ACK, FIN, ACK, FIN, ACK"},
+	"https":    {14, 52, "7 de controle TCP + ~7 segmentos de TLS e HTTP"},
+	"dns":      {2, 28, "consulta e resposta UDP"},
+	"udp_echo": {40, 28, "20 datagramas de ida e 20 ecos"},
 }
 
 func readSamples(path string) ([]sample, error) {
@@ -224,13 +225,17 @@ func main() {
 
 	var overhead float64
 	var execs int
-	kinds := []string{"tcp", "dns", "https"}
+	kinds := []string{"tcp", "dns", "https", "udp_echo"}
 	for _, k := range kinds {
 		m := headerModel[k]
 		overhead += float64(counts[k] * m.packets * m.bytes)
 		execs += counts[k]
 	}
 	execsH := float64(execs) / measuredH
+	expectedH, _ := strconv.Atoi(env["esperado_h"])
+	if expectedH == 0 {
+		expectedH = 1620
+	}
 	overheadH := overhead / measuredH
 	totalH := payloadH + overheadH
 	dbPerExec := (last.db - first.db) / float64(execs)
@@ -255,7 +260,7 @@ func main() {
 	fmt.Printf("| Memória residente, máxima | %s |\n", mb(rssMax*1024))
 	fmt.Printf("| Tráfego de dados no socket (nettop), entrada | %s/h |\n", kb(inH))
 	fmt.Printf("| Tráfego de dados no socket (nettop), saída | %s/h |\n", kb(outH))
-	fmt.Printf("| Execuções de sonda | %d em %s h medindo (%s/h; esperado com os intervalos padrão: 1620/h) |\n", execs, num(measuredH, 2), num(execsH, 0))
+	fmt.Printf("| Execuções de sonda | %d em %s h medindo (%s/h; esperado com os intervalos padrão: %d/h) |\n", execs, num(measuredH, 2), num(execsH, 0), expectedH)
 	fmt.Printf("| Banco de dados, crescimento por execução | %s B |\n", num(dbPerExec, 0))
 	fmt.Printf("| Banco de dados, crescimento por hora medindo | %s |\n", kb(dbGrowthH))
 	fmt.Printf("| Banco de dados, tamanho final | %s |\n\n", mb(last.db))
@@ -265,6 +270,9 @@ func main() {
 	fmt.Printf("| Sonda | Execuções | Pacotes por execução (modelo) | Cabeçalho por pacote | Cabeçalhos estimados |\n| --- | --- | --- | --- | --- |\n")
 	for _, k := range kinds {
 		m := headerModel[k]
+		if counts[k] == 0 {
+			continue
+		}
 		fmt.Printf("| %s | %d | %d (%s) | %d B | %s |\n", strings.ToUpper(k), counts[k], m.packets, m.desc, m.bytes, kb(float64(counts[k]*m.packets*m.bytes)))
 	}
 	fmt.Printf("\n| | Por hora | Por dia |\n| --- | --- | --- |\n")
@@ -319,9 +327,15 @@ func main() {
 	fmt.Printf("- Endpoints no próprio computador (loopback): mede o custo do agente, não a latência da internet. Os tamanhos de pacote TCP e TLS são os mesmos de uma rede real; o MTU de loopback é maior, mas as mensagens das sondas cabem num pacote.\n")
 	fmt.Printf("- Cabeçalhos por modelo, não por captura de pacotes (que exigiria privilégio de administrador).\n")
 	fmt.Printf("- CPU e memória vêm do `ps` uma vez por minuto; picos mais curtos que isso podem não aparecer.\n")
-	fmt.Printf("- O computador ficou suspenso a maior parte do período. CPU e memória vêm só dos minutos acordados, e a maior parte dos despertares foi curta (manutenção do macOS), quando o agente recupera as sondas atrasadas.\n")
-	fmt.Printf("- A comparação com o `pmset` valida a heurística só para o sono deste computador neste período. Sono mais curto que o limiar não é detectado, e relógio adiantado continua indistinguível de suspensão.\n")
-	fmt.Printf("- A sonda UDP (F12) ainda não existe e não está incluída.\n")
+	if suspended := cov["suspended"].ms / 1000; suspended > measuredS {
+		fmt.Printf("- O computador ficou suspenso a maior parte do período. CPU e memória vêm só dos minutos acordados, e a maior parte dos despertares foi curta (manutenção do macOS), quando o agente recupera as sondas atrasadas.\n")
+	}
+	if len(sleeps) > 0 {
+		fmt.Printf("- A comparação com o `pmset` valida a heurística só para o sono deste computador neste período. Sono mais curto que o limiar não é detectado, e relógio adiantado continua indistinguível de suspensão.\n")
+	}
+	if counts["udp_echo"] == 0 {
+		fmt.Printf("- A sonda UDP não estava ativa nesta medição.\n")
+	}
 }
 
 func verdict(ok bool) string {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"embed"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -233,11 +234,32 @@ type ProbeSummary struct {
 	ByStatus                    map[string]int
 	OKDurations                 []time.Duration
 	LastStarted                 time.Time
+	UDPSent, UDPLost            int
+	Jitters                     []int64
+}
+
+type UDPBurst struct {
+	Sent, Lost int
+	JitterUS   int64
+}
+
+func ParseUDP(kind, phasesJSON string) *UDPBurst {
+	if kind != "udp_echo" || phasesJSON == "" {
+		return nil
+	}
+	var ph map[string]int64
+	if json.Unmarshal([]byte(phasesJSON), &ph) != nil {
+		return nil
+	}
+	if _, ok := ph["sent"]; !ok {
+		return nil
+	}
+	return &UDPBurst{Sent: int(ph["sent"]), Lost: int(ph["lost"]), JitterUS: ph["jitter_us"]}
 }
 
 func (s *Store) Summaries(ctx context.Context, since time.Time) ([]ProbeSummary, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT pd.id, pd.kind, pd.target, e.label, pd.protocol_version, pd.interval_ms, o.status, o.duration_us, o.started_wall_ms
+		SELECT pd.id, pd.kind, pd.target, e.label, pd.protocol_version, pd.interval_ms, o.status, o.duration_us, o.started_wall_ms, o.phases_json
 		FROM observations o
 		JOIN probe_definitions pd ON pd.id = o.probe_def_id
 		JOIN endpoints e ON e.id = pd.endpoint_id
@@ -250,10 +272,10 @@ func (s *Store) Summaries(ctx context.Context, since time.Time) ([]ProbeSummary,
 	byID := map[string]*ProbeSummary{}
 	var order []string
 	for rows.Next() {
-		var id, kind, target, label, status string
+		var id, kind, target, label, status, phases string
 		var version int
 		var intervalMS, durUS, startedMS int64
-		if err := rows.Scan(&id, &kind, &target, &label, &version, &intervalMS, &status, &durUS, &startedMS); err != nil {
+		if err := rows.Scan(&id, &kind, &target, &label, &version, &intervalMS, &status, &durUS, &startedMS, &phases); err != nil {
 			return nil, err
 		}
 		ps, ok := byID[id]
@@ -267,6 +289,13 @@ func (s *Store) Summaries(ctx context.Context, since time.Time) ([]ProbeSummary,
 		ps.ByStatus[status]++
 		if status == "ok" {
 			ps.OKDurations = append(ps.OKDurations, time.Duration(durUS)*time.Microsecond)
+		}
+		if u := ParseUDP(kind, phases); u != nil {
+			ps.UDPSent += u.Sent
+			ps.UDPLost += u.Lost
+			if u.Sent-u.Lost > 1 {
+				ps.Jitters = append(ps.Jitters, u.JitterUS)
+			}
 		}
 		if t := time.UnixMilli(startedMS); t.After(ps.LastStarted) {
 			ps.LastStarted = t
@@ -291,12 +320,13 @@ type ObservationRow struct {
 	Started         time.Time
 	Duration        time.Duration
 	Status          string
+	UDP             *UDPBurst
 }
 
 func (s *Store) ObservationsBetween(ctx context.Context, from, to time.Time) ([]ObservationRow, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT pd.id, pd.kind, pd.target, e.label, pd.protocol_version, pd.interval_ms,
-		       o.started_wall_ms, o.duration_us, o.status
+		       o.started_wall_ms, o.duration_us, o.status, o.phases_json
 		FROM observations o
 		JOIN probe_definitions pd ON pd.id = o.probe_def_id
 		JOIN endpoints e ON e.id = pd.endpoint_id
@@ -310,10 +340,12 @@ func (s *Store) ObservationsBetween(ctx context.Context, from, to time.Time) ([]
 	for rows.Next() {
 		var r ObservationRow
 		var intervalMS, startedMS, durUS int64
+		var phases string
 		if err := rows.Scan(&r.ProbeDefID, &r.Kind, &r.Target, &r.EndpointLabel, &r.ProtocolVersion,
-			&intervalMS, &startedMS, &durUS, &r.Status); err != nil {
+			&intervalMS, &startedMS, &durUS, &r.Status, &phases); err != nil {
 			return nil, err
 		}
+		r.UDP = ParseUDP(r.Kind, phases)
 		r.Interval = time.Duration(intervalMS) * time.Millisecond
 		r.Started = time.UnixMilli(startedMS)
 		r.Duration = time.Duration(durUS) * time.Microsecond

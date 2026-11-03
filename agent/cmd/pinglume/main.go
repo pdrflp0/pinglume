@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	version     = "0.6.0"
+	version     = "0.7.0"
 	defaultPort = 47821
 	demoPort    = 47822
 )
