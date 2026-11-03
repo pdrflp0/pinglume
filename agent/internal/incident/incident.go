@@ -34,6 +34,9 @@ type Stats struct {
 	FailRate float64        `json:"failRate"`
 	P50US    *int64         `json:"p50Us"`
 	P95US    *int64         `json:"p95Us"`
+	UDPSent  int            `json:"udpSent,omitempty"`
+	UDPLost  int            `json:"udpLost,omitempty"`
+	UDPLoss  float64        `json:"udpLoss,omitempty"`
 }
 
 type ProbeResult struct {
@@ -130,6 +133,10 @@ func Analyze(ctx context.Context, st *store.Store, inc store.Incident, now, live
 			s, oks = &x.res.Window, &x.winOK
 		}
 		s.N++
+		if r.UDP != nil {
+			s.UDPSent += r.UDP.Sent
+			s.UDPLost += r.UDP.Lost
+		}
 		if r.Status == "ok" {
 			s.OK++
 			*oks = append(*oks, r.Duration)
@@ -147,6 +154,9 @@ func Analyze(ctx context.Context, st *store.Store, inc store.Incident, now, live
 		}
 		w, b := x.res.Window, x.res.Baseline
 		x.res.Failing = w.N > 0 && w.N-w.OK > 0 && w.FailRate > b.FailRate
+		if x.res.Kind == "udp_echo" {
+			x.res.Failing = w.UDPLost >= minUDPLost && w.UDPLoss > b.UDPLoss+udpLossMargin
+		}
 		x.res.NoBaseline = b.OK < minBaselineOKs
 		if !x.res.NoBaseline && w.P50US != nil && b.P50US != nil && b.P95US != nil {
 			x.res.Slow = *w.P50US > 2**b.P50US && *w.P50US > *b.P95US
@@ -164,7 +174,15 @@ func Analyze(ctx context.Context, st *store.Store, inc store.Incident, now, live
 	return a, nil
 }
 
+const (
+	minUDPLost    = 2
+	udpLossMargin = 0.02
+)
+
 func finish(s *Stats, oks []time.Duration) {
+	if s.UDPSent > 0 {
+		s.UDPLoss = float64(s.UDPLost) / float64(s.UDPSent)
+	}
 	if s.N > 0 {
 		s.FailRate = float64(s.N-s.OK) / float64(s.N)
 	}
@@ -177,7 +195,7 @@ func finish(s *Stats, oks []time.Duration) {
 	s.P50US, s.P95US = &p50, &p95
 }
 
-var kindLabel = map[string]string{"tcp": "TCP", "dns": "DNS", "https": "HTTPS"}
+var kindLabel = map[string]string{"tcp": "TCP", "dns": "DNS", "https": "HTTPS", "udp_echo": "UDP"}
 
 func probeName(p ProbeResult) string {
 	k := kindLabel[p.Kind]
@@ -256,6 +274,20 @@ func interpret(a *Analysis) {
 		}
 	}
 	for _, p := range failing {
+		if p.Kind == "udp_echo" {
+			base := fmt.Sprintf("na linha de base, %s", pct(p.Baseline.UDPLoss))
+			if p.Baseline.UDPSent == 0 {
+				base = "não há linha de base para comparar"
+			}
+			a.Findings = append(a.Findings, Finding{
+				Text: fmt.Sprintf("Perda de datagramas UDP para %s: %s na janela (%d de %d datagramas); %s. É perda de datagramas da sonda, não uma medida geral de perda de pacotes.",
+					p.Endpoint, pct(p.Window.UDPLoss), p.Window.UDPLost, p.Window.UDPSent, base),
+				ProbeDefID: p.ProbeDefID,
+				Inputs: []string{fmt.Sprintf("janela: %d rajadas, %d datagramas", p.Window.N, p.Window.UDPSent),
+					fmt.Sprintf("base: %d datagramas", p.Baseline.UDPSent)},
+			})
+			continue
+		}
 		fails := []string{}
 		for k, v := range p.Window.Failures {
 			fails = append(fails, fmt.Sprintf("%d %s", v, failureLabel(k)))

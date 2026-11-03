@@ -443,3 +443,29 @@ test("modo real não mostra a faixa", async () => {
   });
   expect(screen.queryByText(/SIMULAÇÃO/)).toBeNull();
 });
+
+test("sonda UDP mostra perda de datagramas e jitter, sem falar em perda de pacotes IP", async () => {
+  const udpStatus = structuredClone(status);
+  udpStatus.summary.probes = [
+    {
+      ...status.summary.probes[0],
+      probeDefId: "u1",
+      kind: "udp_echo",
+      target: "127.0.0.1:9443",
+      intervalMs: 15_000,
+      failures: {},
+      udpSent: 4800,
+      udpLost: 96,
+      udpLossRate: 0.02,
+      jitterP50Us: 450,
+    },
+  ];
+  fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+    if (url.startsWith("/api/v1/status")) return respond(udpStatus);
+    return route(url, init);
+  });
+  render(<App />);
+  expect(await screen.findByText("perda de datagramas 2,0% (96 de 4800)")).toBeTruthy();
+  expect(screen.getByText("jitter 450 µs")).toBeTruthy();
+  expect(screen.getAllByText(/UDP v1/).length).toBeGreaterThan(0);
+});

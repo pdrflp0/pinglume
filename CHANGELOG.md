@@ -4,6 +4,37 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); 
 
 ## [Não publicado]
 
+## [0.7.0] - 2026-11-03
+
+Fatia F12: sonda UDP de perda de datagramas e jitter, no ritmo de áudio de chamada. Com ela as 12 fatias do Nível 1 estão feitas. O agente continua medindo só o testbed local: os endpoints próprios ainda não estão hospedados, e isso é pré-requisito para uso real.
+
+### Adicionado
+
+- Sonda `udp_echo` (F12): rajada de 20 datagramas de 64 B a cada 20 ms com sequência e nonce; mede RTT (mediana e p95), perda de datagramas, reordenação e jitter; rajada sem nenhum eco vira `timeout`. Flags `--dev-udp`, `--udp-interval` (padrão 15 s) e `--udp-wait` (padrão 1 s).
+- `probe-server`: eco UDP (`-udp`) que só responde pacotes pequenos com a assinatura da sonda (sem amplificação), com limite por IP e falhas simuláveis `udpLoss` (0–100%) e `udpJitter`.
+- Perda e jitter UDP em todo o fluxo: resumo, linha do tempo (faixa "Perda"), compactação por minuto (migração 007), `incident-v1` (degradação quando a perda de datagramas supera a base em mais de 2 p.p.), `compare-v1` (perda por rajada com intervalo de 95%), exportação, CLI e dashboard; sempre rotulada como perda de datagramas da sonda, nunca como perda de pacotes IP.
+
+### Alterado
+
+- `testbed/measure/measure.sh`: cada probe-server ganha porta UDP própria (`-udp 127.0.0.1:945x`; sem isso os três disputavam a porta UDP padrão) e o agente mede o eco UDP em um endpoint (`--dev-udp ep-1=…`). O `env.txt` registra as execuções esperadas por hora (1860 com UDP).
+- `summarize`: inclui `udp_echo` no modelo de cabeçalhos (40 pacotes por rajada: 20 datagramas e 20 ecos, 28 B cada) e usa as execuções esperadas do `env.txt`.
+- `probe-server`: a linha "probe-server pronto" do log passa a mostrar o endereço do eco UDP.
+- `summarize`: os limites sobre sono só aparecem quando a medição teve suspensão.
+- Rodada indicativa de 30 min com a sonda UDP ativa (02/11 23:24 a 03/11 00:10; o Mac dormiu ~16 min no meio, excluídos das taxas): [docs/medicoes-recursos-udp.md](docs/medicoes-recursos-udp.md), dados brutos em `docs/medicoes/2026-11-02-30m-udp/`. Tráfego total ~2,1 MB/h (1,3 MB/h no socket + 0,8 MB/h de cabeçalhos por modelo; meta ≤ 5 MB/h), CPU 0,100% de um núcleo, memória 17,4 MB em média (máx. 23,3 MB), 1864 execuções/h para 1860 esperadas, todas `ok`. A primeira amostra bate com o modelo: o UDP soma exatamente 5120 B/min em cada sentido (4 rajadas × 20 × 64 B). Disco: 218 B por execução, **65,1 MB projetados em 7 dias, no limite da meta de ~65 MB**; com o UDP o conjunto padrão deixa de ter folga de disco. 2 de 2 sonos detectados (diferença máxima 3 s / 2 s).
+
+### Corrigido
+
+- `measure.sh` passa a usar `nettop -d` (delta entre amostras). Sem `-d`, o `nettop` informa cada fluxo com o total desde que ele abriu: sondas abrem e fecham conexões a cada execução e eram contadas certo, mas uma conexão longa (por exemplo, o dashboard aberto no navegador, servido pelo próprio agente) era recontada a cada minuto. Isso apareceu numa rodada de teste com o dashboard aberto (82 MB/h de saída) e foi confirmado com um servidor HTTP keep-alive: sem `-d`, 133 → 280 → 401 KB em amostras seguidas; com `-d`, só o delta. A medição de 24 h da v0.6.0 não muda: os valores constantes ao longo das 24 h descartam fluxos longos, e com fluxos curtos os dois modos dão o mesmo número.
+- O agendador descontava do intervalo a duração reportada pela sonda, e não o tempo decorrido; na sonda UDP, que reporta o RTT mediano (~0,2 ms) mas leva ~1,4 s por rajada, cada ciclo ficava mais longo e a cobertura caía para ~81%. Agora o agendador mede o tempo decorrido.
+
+### Limites conhecidos
+
+- É perda de datagramas da sonda contra o próprio endpoint, não perda geral de pacotes IP nem a perda que um aplicativo de chamada veria; o rótulo diz isso em todo lugar.
+- Validação de perda e jitter só no testbed com falhas injetadas (20% de perda e 30 ms de jitter: 3–8 datagramas perdidos por rajada, jitter de 6–11 ms); nenhuma medição contra a internet real.
+- O limiar UDP da `incident-v1` (base + 2 p.p., ≥ 2 datagramas perdidos) é inicial, ainda não calibrado com uso real.
+- O custo com UDP vem de uma rodada de 30 min, indicativa. Com UDP em um endpoint, a projeção de disco em 7 dias (65,1 MB) fica no limite da meta de ~65 MB; UDP em mais endpoints passaria dela.
+- Seguem valendo os limites anteriores.
+
 ## [0.6.0] - 2026-11-02
 
 Fatia F11: medição de recursos do agente com 24 h reais no testbed local, publicada com os dados brutos e o gerador do relatório. A mesma medição serviu para conferir, pela primeira vez com sono real, a detecção de suspensão. Resultado completo: [docs/medicoes-recursos.md](docs/medicoes-recursos.md). O Nível 1 ainda não está completo: falta a sonda UDP (F12).
@@ -311,7 +342,8 @@ Primeira versão. Nível 1 ainda incompleto: só existe a sonda TCP, e ela mede 
 - Sem sondas DNS/HTTPS/UDP, incidentes, comparação guiada, exportação, retenção ou modo demo (fatias F5–F12).
 - Nenhuma medição de recursos (CPU, memória, tráfego) publicada ainda.
 
-[Não publicado]: https://github.com/pdrflp0/pinglume/compare/v0.6.0...develop
+[Não publicado]: https://github.com/pdrflp0/pinglume/compare/v0.7.0...develop
+[0.7.0]: https://github.com/pdrflp0/pinglume/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/pdrflp0/pinglume/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/pdrflp0/pinglume/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/pdrflp0/pinglume/compare/v0.3.0...v0.4.0

@@ -32,6 +32,10 @@ type Probe struct {
 	Coverage        *float64       `json:"coverage"`
 	BackoffMS       int64          `json:"backoffMs"`
 	Approximate     bool           `json:"approximate"`
+	UDPSent         int            `json:"udpSent,omitempty"`
+	UDPLost         int            `json:"udpLost,omitempty"`
+	UDPLossRate     *float64       `json:"udpLossRate,omitempty"`
+	JitterP50US     *int64         `json:"jitterP50Us,omitempty"`
 	LastStarted     time.Time      `json:"lastStarted"`
 }
 
@@ -84,10 +88,12 @@ func Build(ctx context.Context, st *store.Store, from, to time.Time, opt Options
 		return s, err
 	}
 	type minAcc struct {
-		meta     store.MinuteRow
-		n, ok    int
-		fails    map[string]int
-		p50, p95 []stats.Weighted
+		meta             store.MinuteRow
+		n, ok            int
+		fails            map[string]int
+		p50, p95         []stats.Weighted
+		udpSent, udpLost int
+		jitter           []stats.Weighted
 	}
 	byMin := map[string]*minAcc{}
 	var minOrder []string
@@ -108,6 +114,11 @@ func Build(ctx context.Context, st *store.Store, from, to time.Time, opt Options
 		}
 		if m.P95US != nil {
 			a.p95 = append(a.p95, stats.Weighted{Value: *m.P95US, Weight: m.OK})
+		}
+		a.udpSent += m.UDPSent
+		a.udpLost += m.UDPLost
+		if m.JitterP50US != nil {
+			a.jitter = append(a.jitter, stats.Weighted{Value: *m.JitterP50US, Weight: m.OK})
 		}
 	}
 	seen := map[string]bool{}
@@ -136,6 +147,11 @@ func Build(ctx context.Context, st *store.Store, from, to time.Time, opt Options
 			}
 		}
 		cancelled := ps.ByStatus["cancelled"]
+		p.UDPSent, p.UDPLost = ps.UDPSent, ps.UDPLost
+		var jitter []stats.Weighted
+		for _, j := range ps.Jitters {
+			jitter = append(jitter, stats.Weighted{Value: j, Weight: 1})
+		}
 		if a := byMin[ps.ProbeDefID]; a != nil {
 			p.Approximate = true
 			p.Total += a.n
@@ -149,9 +165,17 @@ func Build(ctx context.Context, st *store.Store, from, to time.Time, opt Options
 				p95 = append(p95, stats.Weighted{Value: d.Microseconds(), Weight: 1})
 			}
 			p.P50US, p.P95US = stats.Quantile(p50, 0.5), stats.Quantile(p95, 0.95)
+			p.UDPSent += a.udpSent
+			p.UDPLost += a.udpLost
+			jitter = append(jitter, a.jitter...)
 			if p.LastStarted.IsZero() {
 				p.LastStarted = a.meta.Minute
 			}
+		}
+		if p.UDPSent > 0 {
+			r := float64(p.UDPLost) / float64(p.UDPSent)
+			p.UDPLossRate = &r
+			p.JitterP50US = stats.Quantile(jitter, 0.5)
 		}
 		if ps.Interval > 0 && measuring >= ps.Interval {
 			expected := float64(measuring) / float64(ps.Interval)

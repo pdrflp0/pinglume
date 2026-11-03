@@ -18,11 +18,13 @@ import {
   duration,
   failureLabel,
   kindMeasure,
+  kindName,
   latency,
   megabytes,
   percent,
   stateLabel,
   stateOrder,
+  udpLoss,
   until,
 } from "./format";
 import { pan, PRESETS, resolve, select, toQuery, zoom, type ViewRange } from "./range";
@@ -403,7 +405,7 @@ function ProbeTable({ probes }: { probes: Status["summary"]["probes"] }) {
                     <div className="muted small mono">{p.target}</div>
                   </th>
                   <td>
-                    {p.kind.toUpperCase()} v{p.protocolVersion}
+                    {kindName(p.kind)} v{p.protocolVersion}
                     <div className="muted small">a cada {duration(p.intervalMs)}</div>
                     <div className="muted small">{kindMeasure[p.kind] ?? p.kind}</div>
                   </td>
@@ -416,7 +418,12 @@ function ProbeTable({ probes }: { probes: Status["summary"]["probes"] }) {
                   </td>
                   <td className="r num">{p.ok}</td>
                   <td>
-                    {fails.length === 0 ? (
+                    {p.udpLossRate !== undefined && p.udpSent ? (
+                      <>
+                        {udpLoss(p.udpLost ?? 0, p.udpSent)}
+                        <div className="muted small">jitter {latency(p.jitterP50Us ?? null)}</div>
+                      </>
+                    ) : fails.length === 0 ? (
                       <span className="muted">nenhuma</span>
                     ) : (
                       <ul className="fails">
@@ -447,7 +454,8 @@ function ProbeTable({ probes }: { probes: Status["summary"]["probes"] }) {
         Cobertura: execuções concluídas ÷ esperadas enquanto o agente media. Backoff: depois de falhas seguidas, o
         agente amplia o intervalo para não insistir no endpoint, e a cobertura cai de propósito. P50/P95: só execuções
         bem-sucedidas; "aprox." quando o período inclui dados antigos já compactados em agregados por minuto (as contagens
-        continuam exatas). Falhas são rotuladas pelo protocolo da sonda; não são perda de pacotes IP.
+        continuam exatas). Falhas são rotuladas pelo protocolo da sonda; não são perda de pacotes IP. Na sonda UDP, a perda é de datagramas
+        da própria sonda.
       </p>
     </>
   );

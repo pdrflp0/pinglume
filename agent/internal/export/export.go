@@ -39,6 +39,10 @@ type ProbeDoc struct {
 	P95US           *int64         `json:"p95Us"`
 	Coverage        *float64       `json:"coverage"`
 	BackoffMS       int64          `json:"backoffMs"`
+	UDPSent         int            `json:"udpSent,omitempty"`
+	UDPLost         int            `json:"udpLost,omitempty"`
+	UDPLossRate     *float64       `json:"udpLossRate,omitempty"`
+	JitterP50US     *int64         `json:"jitterP50Us,omitempty"`
 }
 
 type IncidentDoc struct {
@@ -103,9 +107,10 @@ type Method struct {
 }
 
 var measures = map[string]string{
-	"tcp":   "tempo do handshake TCP até o endpoint, por IP",
-	"dns":   "tempo para resolver um nome único (sem cache) na zona Pinglume",
-	"https": "requisição HTTPS completa com conexão nova, por IP",
+	"tcp":      "tempo do handshake TCP até o endpoint, por IP",
+	"dns":      "tempo para resolver um nome único (sem cache) na zona Pinglume",
+	"https":    "requisição HTTPS completa com conexão nova, por IP",
+	"udp_echo": "rajada de 20 datagramas UDP de 64 B a cada 20 ms: RTT, perda de datagramas e jitter",
 }
 
 func method() Method {
@@ -159,7 +164,8 @@ func Build(ctx context.Context, st *store.Store, opt Options, agentVersion strin
 	for _, p := range sum.Probes {
 		s.Probes = append(s.Probes, ProbeDoc{Endpoint: red.Text(p.Endpoint), Kind: p.Kind, ProtocolVersion: p.ProtocolVersion,
 			Measures: measures[p.Kind], Target: red.Target(p.Target), IntervalMS: p.IntervalMS, Total: p.Total, OK: p.OK,
-			Failures: p.Failures, P50US: p.P50US, P95US: p.P95US, Coverage: p.Coverage, BackoffMS: p.BackoffMS})
+			Failures: p.Failures, P50US: p.P50US, P95US: p.P95US, Coverage: p.Coverage, BackoffMS: p.BackoffMS,
+			UDPSent: p.UDPSent, UDPLost: p.UDPLost, UDPLossRate: p.UDPLossRate, JitterP50US: p.JitterP50US})
 	}
 
 	notesOmitted := 0

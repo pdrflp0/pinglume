@@ -66,15 +66,20 @@ func cmdStatus(args []string) error {
 		if p.BackoffMS > 0 {
 			bo = (time.Duration(p.BackoffMS) * time.Millisecond).Round(time.Second).String()
 		}
+		fails := failures(p.Failures)
+		if p.UDPLossRate != nil {
+			fails = fmt.Sprintf("perda %s (%d/%d), jitter %s", ratio(p.UDPLossRate), p.UDPLost, p.UDPSent, micros(p.JitterP50US))
+		}
 		fmt.Fprintf(w, "%s\t%s v%d\t%s\t%d\t%s\t%s\t%d\t%s\t%s\t%s\t%s\n",
 			p.Endpoint, p.Kind, p.ProtocolVersion, p.Target, p.Total, ratio(p.Coverage), bo, p.OK,
-			failures(p.Failures), approx(micros(p.P50US), p.Approximate), approx(micros(p.P95US), p.Approximate),
+			fails, approx(micros(p.P50US), p.Approximate), approx(micros(p.P95US), p.Approximate),
 			p.LastStarted.Local().Format("15:04:05"))
 	}
 	w.Flush()
 	fmt.Println("\nCOBERTURA: execuções concluídas ÷ esperadas durante o tempo medindo.")
 	fmt.Println("BACKOFF: tempo com intervalo ampliado após falhas seguidas (reduz a cobertura de propósito).")
-	fmt.Println("P50/P95, só execuções ok — tcp: handshake; dns: resolução de nome único; https: requisição completa com conexão nova.")
+	fmt.Println("P50/P95, só execuções ok — tcp: handshake; dns: resolução de nome único; https: requisição completa com conexão nova; udp_echo: RTT mediano de cada rajada.")
+	fmt.Println("udp_echo: perda de datagramas da sonda (rajadas de 20 a cada 20 ms), não perda geral de pacotes IP.")
 	fmt.Println("≈: percentis aproximados, o período inclui dados antigos compactados por minuto (contagens exatas).")
 	fmt.Println("Falhas são rotuladas pelo protocolo da sonda; não são perda de pacotes IP.")
 	return nil

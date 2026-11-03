@@ -79,4 +79,4 @@ O agente detecta suspensão pela diferença entre relógio civil e monotônico (
 - CPU e memória vêm do `ps` uma vez por minuto; picos mais curtos que isso podem não aparecer.
 - O computador ficou suspenso a maior parte do período. CPU e memória vêm só dos minutos acordados, e a maior parte dos despertares foi curta (manutenção do macOS), quando o agente recupera as sondas atrasadas.
 - A comparação com o `pmset` valida a heurística só para o sono deste computador neste período. Sono mais curto que o limiar não é detectado, e relógio adiantado continua indistinguível de suspensão.
-- A sonda UDP (F12) ainda não existe e não está incluída.
+- A sonda UDP não estava ativa nesta medição.

@@ -26,6 +26,7 @@ func main() {
 	dnsAddr := flag.String("dns", "127.0.0.1:15353", "endereço UDP do DNS (vazio desativa); evite 5353, que é do mDNS")
 	zone := flag.String("zone", "p.pinglume.test", "zona DNS atendida")
 	answer := flag.String("answer", "127.0.0.1", "endereço IPv4 devolvido nas respostas A")
+	udpAddr := flag.String("udp", "127.0.0.1:9443", "endereço UDP do eco (vazio desativa)")
 	adminAddr := flag.String("admin", "127.0.0.1:9900", "API de falhas (só loopback; vazio desativa)")
 	tlsDir := flag.String("tls-dir", "testbed/tls", "onde fica o certificado do testbed")
 	serverName := flag.String("server-name", "probe.pinglume.test", "nome no certificado")
@@ -82,6 +83,14 @@ func main() {
 		go serveDNS(pc, strings.ToLower(*zone), ansAddr, faults)
 	}
 
+	if *udpAddr != "" {
+		pc, err := net.ListenPacket("udp", *udpAddr)
+		if err != nil {
+			fail("escuta UDP", err)
+		}
+		go serveUDPEcho(pc, faults)
+	}
+
 	if *adminAddr != "" {
 		ap, err := netip.ParseAddrPort(*adminAddr)
 		if err != nil || !ap.Addr().IsLoopback() {
@@ -92,12 +101,12 @@ func main() {
 				if err := srv.apply(s); err != nil {
 					logger.Error("aplicar falha", "err", err)
 				}
-				logger.Warn("falhas atualizadas", "dns", s.DNS, "https", s.HTTPS, "atraso", s.HTTPSDelay, "listener", s.Listener)
+				logger.Warn("falhas atualizadas", "dns", s.DNS, "https", s.HTTPS, "atraso", s.HTTPSDelay, "listener", s.Listener, "perda_udp", s.UDPLoss, "jitter_udp", s.UDPJitter)
 			})}
 		go admin.ListenAndServe()
 	}
 
-	logger.Info("probe-server pronto", "tcp+https", *addr, "dns", *dnsAddr, "zona", *zone,
+	logger.Info("probe-server pronto", "tcp+https", *addr, "udp", *udpAddr, "dns", *dnsAddr, "zona", *zone,
 		"admin", *adminAddr, "certificado", certPath)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

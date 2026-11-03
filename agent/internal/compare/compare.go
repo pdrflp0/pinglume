@@ -153,8 +153,13 @@ func collect(rows []store.ObservationRow) map[string]*series {
 		}
 		if r.Status == "ok" {
 			s.okDur = append(s.okDur, float64(r.Duration.Microseconds()))
+		}
+		switch {
+		case r.UDP != nil && r.UDP.Sent > 0:
+			s.failInd = append(s.failInd, float64(r.UDP.Lost)/float64(r.UDP.Sent))
+		case r.Status == "ok":
 			s.failInd = append(s.failInd, 0)
-		} else {
+		default:
 			s.failInd = append(s.failInd, 1)
 		}
 	}
@@ -387,7 +392,15 @@ func netDuring(ctx context.Context, st *store.Store, from, to time.Time) (*netct
 	return atStart, changes, nil
 }
 
-var kindLabel = map[string]string{"tcp": "TCP", "dns": "DNS", "https": "HTTPS"}
+var kindLabel = map[string]string{"tcp": "TCP", "dns": "DNS", "https": "HTTPS", "udp_echo": "UDP"}
+
+func failureText(kind string) string {
+	if kind == "udp_echo" {
+		return "%s: perda de datagramas UDP de %s em A e %s em B (diferença %s; intervalo: %s a %s). É perda de datagramas da sonda, não uma medida geral de perda de pacotes."
+	}
+	return "%s: falhas em %s das execuções em A e %s em B (diferença %s; intervalo: %s a %s)."
+}
+
 var netLabel = map[string]string{
 	netctx.KindWiFi: "Wi-Fi", netctx.KindEthernet: "cabo (Ethernet)", netctx.KindVPN: "VPN",
 	netctx.KindOther: "outra interface", netctx.KindUnknown: "desconhecida",
@@ -434,7 +447,7 @@ func interpret(r *Result, e store.Experiment) {
 		}
 		if f := p.Failures; f != nil && (p.A.FailRate > 0 || p.B.FailRate > 0) {
 			r.Findings = append(r.Findings, Finding{
-				Text: fmt.Sprintf("%s: falhas em %s das execuções em A e %s em B (diferença %s; intervalo: %s a %s).",
+				Text: fmt.Sprintf(failureText(p.Kind),
 					name(p), pctText(p.A.FailRate), pctText(p.B.FailRate), ppText(f.Estimate), ppText(f.CILow), ppText(f.CIHigh)),
 				Inputs: []string{fmt.Sprintf("A: %d execuções", p.A.N), fmt.Sprintf("B: %d execuções", p.B.N)},
 			})

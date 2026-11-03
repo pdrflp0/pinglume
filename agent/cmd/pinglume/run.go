@@ -98,12 +98,15 @@ func cmdRun(args []string) error {
 	limitMB := fs.Int64("disk-limit-mb", pol.LimitBytes>>20, "limite de espaço do banco em MB (0 desativa)")
 	fs.Var(&cfg.targets, "dev-target", "alvo TCP/HTTPS de desenvolvimento label=ip:porta (repetível)")
 	fs.Var(&cfg.resolvers, "dev-dns", "servidor DNS de desenvolvimento label=ip:porta (repetível)")
+	fs.Var(&cfg.udps, "dev-udp", "eco UDP de desenvolvimento label=ip:porta (repetível)")
+	fs.DurationVar(&cfg.udpInterval, "udp-interval", 15*time.Second, "intervalo entre rajadas UDP")
+	fs.DurationVar(&cfg.udpWait, "udp-wait", time.Second, "espera pelos ecos depois do último datagrama da rajada")
 	fs.Parse(args)
 	c.resolve()
 
-	if len(cfg.targets) == 0 && len(cfg.resolvers) == 0 {
+	if len(cfg.targets) == 0 && len(cfg.resolvers) == 0 && len(cfg.udps) == 0 {
 		return errors.New("nenhum endpoint configurado: os endpoints próprios ainda não estão hospedados; " +
-			"use --dev-target/--dev-dns com o probe-server local (veja README)")
+			"use --dev-target/--dev-dns/--dev-udp com o probe-server local (veja README)")
 	}
 	if err := cfg.validate(); err != nil {
 		return err
