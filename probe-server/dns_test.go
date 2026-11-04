@@ -112,7 +112,7 @@ func startEcho(t *testing.T, state FaultState) string {
 	if err := f.Set(state); err != nil {
 		t.Fatal(err)
 	}
-	go serveUDPEcho(pc, f)
+	go serveUDPEcho(pc, f, 2000)
 	return pc.LocalAddr().String()
 }
 

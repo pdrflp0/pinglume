@@ -11,8 +11,9 @@ var udpMagic = []byte("PGLU")
 
 const maxUDPPayload = 128
 
-func serveUDPEcho(pc net.PacketConn, faults *Faults) error {
+func serveUDPEcho(pc net.PacketConn, faults *Faults, maxPerSecond int) error {
 	limiter := newIPLimiter(400, time.Second)
+	global := newIPLimiter(maxPerSecond, time.Second)
 	buf := make([]byte, 2048)
 	for {
 		n, from, err := pc.ReadFrom(buf)
@@ -23,7 +24,7 @@ func serveUDPEcho(pc net.PacketConn, faults *Faults) error {
 			continue
 		}
 		host, _, _ := net.SplitHostPort(from.String())
-		if !limiter.allow(host) {
+		if !limiter.allow(host) || !global.allow("") {
 			continue
 		}
 		state := faults.Get()
