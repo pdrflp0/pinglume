@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-func loadOrCreateCert(dir, serverName string) (tls.Certificate, string, error) {
+func loadOrCreateCert(dir, serverName string, years int) (tls.Certificate, string, error) {
 	certPath := filepath.Join(dir, "probe-server.pem")
 	keyPath := filepath.Join(dir, "probe-server-key.pem")
 	if c, err := tls.LoadX509KeyPair(certPath, keyPath); err == nil {
@@ -34,11 +34,11 @@ func loadOrCreateCert(dir, serverName string) (tls.Certificate, string, error) {
 	serial, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 62))
 	tmpl := &x509.Certificate{
 		SerialNumber:          serial,
-		Subject:               pkix.Name{CommonName: serverName, Organization: []string{"Pinglume testbed"}},
+		Subject:               pkix.Name{CommonName: serverName, Organization: []string{"Pinglume"}},
 		DNSNames:              []string{serverName},
 		IPAddresses:           []net.IP{net.IPv4(127, 0, 0, 1)},
 		NotBefore:             time.Now().Add(-time.Hour),
-		NotAfter:              time.Now().AddDate(2, 0, 0),
+		NotAfter:              time.Now().AddDate(years, 0, 0),
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: true,

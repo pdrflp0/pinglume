@@ -2,7 +2,7 @@
 
 Ferramenta local para investigar falhas intermitentes de internet durante chamadas: registra medições pequenas ao longo do tempo, marca quando houve medição e quando não houve, e guia comparações antes/depois.
 
-**Estado:** Nível 1 completo (fatias F0–F12), ainda sem uso real. Ainda não há endpoints públicos hospedados; o agente só mede o `probe-server` local (testbed). Desenho completo em [docs/00-desenho-inicial.md](docs/00-desenho-inicial.md).
+**Estado:** Nível 1 completo (fatias F0–F12) e preparo de produção pronto (F13), ainda sem uso real. Os endpoints públicos ainda não estão no ar: o agente só mede o `probe-server` local (testbed) até a lista de produção ser preenchida ([roteiro de hospedagem](docs/hospedagem.md)). Desenho completo em [docs/00-desenho-inicial.md](docs/00-desenho-inicial.md).
 
 ## O que existe hoje
 
@@ -21,6 +21,7 @@ Ferramenta local para investigar falhas intermitentes de internet durante chamad
 | F10 modo demonstração separado | feito e testado |
 | F11 medição de recursos (CPU, memória, tráfego, disco) | feito: [24 h sem UDP](docs/medicoes-recursos.md), [30 min com UDP](docs/medicoes-recursos-udp.md) |
 | F12 sonda UDP de perda e jitter | feito e testado |
+| F13 endpoints de produção: lista embutida, certificado fixado, serviço e instalador | feito e ensaiado localmente; falta hospedar ([roteiro](docs/hospedagem.md)) |
 | Nível 2 em diante | ver backlog no documento de desenho |
 
 ## Rodar localmente
@@ -172,13 +173,18 @@ go -C testbed/measure run ./summarize .measure/<pasta>
 
 O roteiro sobe 3 probe-servers e um agente com os intervalos padrão, amostra CPU, memória (`ps`), dados no socket (`nettop`) e tamanho lógico do banco uma vez por minuto e, no fim, extrai do banco as contagens, a cobertura e as lacunas de suspensão, além dos eventos de sono do `pmset -g log`. Use `.measure/` (fora do git): o macOS apaga `/private/tmp` depois de alguns dias. Resultados publicados: [24 h sem a sonda UDP](docs/medicoes-recursos.md) e [rodada indicativa de 30 min com a sonda UDP](docs/medicoes-recursos-udp.md); dados brutos em [docs/medicoes/](docs/medicoes/).
 
+## Hospedagem
+
+[docs/hospedagem.md](docs/hospedagem.md) traz o passo a passo das contas, das VMs e da instalação com `deploy/deploy.sh`. Para ensaiar o formato da lista sem servidor público, gere uma entrada com `probe-server -print-endpoint` e passe um JSON com loopback em `pinglume run --dev-endpoints`.
+
 ## Desenvolvimento
 
 Branches, versionamento (SemVer) e convenção de commits: [docs/fluxo-git.md](docs/fluxo-git.md). Histórico de versões: [CHANGELOG.md](CHANGELOG.md).
 
 ## Limites conhecidos
 
-- No testbed, a sonda DNS consulta o servidor de teste diretamente (`--dev-dns`). Em produção ela usará o resolvedor do sistema; as duas são definições diferentes e nunca se comparam.
+- No testbed, a sonda DNS consulta o servidor de teste diretamente (`--dev-dns`). Em produção ela usa o resolvedor do sistema, só para endpoints com `dns_zone`, e as duas são definições diferentes que nunca se comparam. Esse caminho de produção ainda não rodou contra um domínio real.
+- A lista de produção é embutida no binário: trocar IP ou certificado de um endpoint exige recompilar o agente. A instalação foi ensaiada em contêiner Ubuntu 24.04, não numa VM dos provedores.
 - Em backoff (até 8× o intervalo), a volta de uma sonda demora mais para aparecer: no ensaio, o DNS restaurado só foi medido ~22 s depois.
 - A sonda UDP (`--dev-udp`) envia rajadas de 20 datagramas de 64 B a cada 20 ms (ritmo de áudio de chamada) e mede RTT, perda de datagramas e jitter. É perda de datagramas da sonda, não perda geral de pacotes IP. Por padrão roda a cada 15 s; é a sonda que mais gera tráfego, então é recomendada em um endpoint só.
 - Os limiares da `incident-v1` (50% de cobertura, latência 2× a mediana e acima do p95 da base, 10 execuções ok de base) são escolhas iniciais, ainda não calibradas com uso real.
@@ -190,7 +196,7 @@ Branches, versionamento (SemVer) e convenção de commits: [docs/fluxo-git.md](d
 - O p95 de períodos compactados é estimado a partir do p95 de cada minuto e tende a sair acima do real.
 - `VACUUM` bloqueia gravações enquanto roda; ele só é usado quando há mais de 25% de espaço livre no arquivo ou o limite foi ultrapassado.
 - A prévia em quadro (iframe) não pôde ser verificada no navegador embutido do app, que bloqueia quadros; o link "Abrir prévia em nova aba" foi verificado.
-- Alvos de desenvolvimento precisam ser loopback ou rede privada; o agente recusa outros.
+- Alvos de desenvolvimento precisam ser loopback ou rede privada; o agente recusa outros. Endereços públicos só entram pela lista embutida.
 - A detecção de suspensão compara relógio civil e monotônico, com limiar de 5 s. Na medição de 24 h ela acertou os 97 períodos de sono do log de energia do macOS (diferença máxima de 10 s), mas isso vale para um Mac e um período; sono mais curto que o limiar não é detectado, e relógio adiantado manualmente continua indistinguível de sono (o motivo registrado diz isso).
 - Depois de um crash, a lacuna começa no último heartbeat (a cada 5 s): o instante exato da queda tem até 5 s de incerteza.
 - A linha do tempo usa escala linear compartilhada entre as sondas: um pico grande achata as demais. Escala logarítmica fica para depois do uso real.

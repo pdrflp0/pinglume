@@ -2,16 +2,13 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
 	"crypto/x509"
-	"encoding/hex"
 	"encoding/json"
-	"encoding/pem"
-	"errors"
 	"fmt"
 	"os"
 	"time"
 
+	"pinglume/agent/internal/endpoints"
 	"pinglume/agent/internal/probe"
 	"pinglume/agent/internal/sched"
 	"pinglume/agent/internal/store"
@@ -24,6 +21,8 @@ type probeConfig struct {
 	httpsInterval, httpsTimeout time.Duration
 	dnsInterval, dnsTimeout     time.Duration
 	devCA, serverName, zone     string
+	endpoints                   []endpoints.Endpoint
+	owner                       string
 }
 
 func (c probeConfig) validate() error {
@@ -44,18 +43,7 @@ func loadPinnedCA(path string) (*x509.CertPool, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	block, _ := pem.Decode(b)
-	if block == nil || block.Type != "CERTIFICATE" {
-		return nil, "", errors.New("arquivo não contém um certificado PEM")
-	}
-	cert, err := x509.ParseCertificate(block.Bytes)
-	if err != nil {
-		return nil, "", err
-	}
-	pool := x509.NewCertPool()
-	pool.AddCert(cert)
-	sum := sha256.Sum256(cert.Raw)
-	return pool, hex.EncodeToString(sum[:8]), nil
+	return endpoints.ParsePin(b)
 }
 
 const (
@@ -79,9 +67,8 @@ func buildJobs(ctx context.Context, st *store.Store, c probeConfig, now time.Tim
 	}
 
 	var jobs []sched.Job
-	add := func(label, host string, p probe.Prober, target string, interval, timeout time.Duration, paramsJSON string) error {
-		def, err := st.EnsureProbeDefinition(ctx,
-			store.Endpoint{Label: label, Host: host, Owner: "dev"},
+	add := func(ep store.Endpoint, p probe.Prober, target string, interval, timeout time.Duration, paramsJSON string) error {
+		def, err := st.EnsureProbeDefinition(ctx, ep,
 			store.ProbeDefinition{Kind: p.Kind(), Target: target, Interval: interval, Timeout: timeout,
 				ProtocolVersion: p.ProtocolVersion(), ParamsJSON: paramsJSON}, now)
 		if err != nil {
@@ -91,9 +78,11 @@ func buildJobs(ctx context.Context, st *store.Store, c probeConfig, now time.Tim
 		return nil
 	}
 
+	dev := func(label, host string) store.Endpoint { return store.Endpoint{Label: label, Host: host, Owner: "dev"} }
+
 	for _, t := range c.targets {
-		addr, host := t.Addr.String(), t.Addr.Addr().String()
-		if err := add(t.Label, host, probe.TCPConnect{Addr: addr, Timeout: c.tcpTimeout},
+		addr, ep := t.Addr.String(), dev(t.Label, t.Addr.Addr().String())
+		if err := add(ep, probe.TCPConnect{Addr: addr, Timeout: c.tcpTimeout},
 			addr, c.tcpInterval, c.tcpTimeout, ""); err != nil {
 			return nil, err
 		}
@@ -101,7 +90,7 @@ func buildJobs(ctx context.Context, st *store.Store, c probeConfig, now time.Tim
 			continue
 		}
 		url := "https://" + addr + "/p"
-		if err := add(t.Label, host,
+		if err := add(ep,
 			probe.HTTPSGet{URL: url, ServerName: c.serverName, RootCAs: pool, Timeout: c.httpsTimeout},
 			url, c.httpsInterval, c.httpsTimeout,
 			params(map[string]string{"serverName": c.serverName, "rootCA": "pinned:" + pin})); err != nil {
@@ -110,7 +99,7 @@ func buildJobs(ctx context.Context, st *store.Store, c probeConfig, now time.Tim
 	}
 	for _, r := range c.resolvers {
 		addr := r.Addr.String()
-		if err := add(r.Label, r.Addr.Addr().String(),
+		if err := add(dev(r.Label, r.Addr.Addr().String()),
 			probe.DNSResolve{Zone: c.zone, Resolver: addr, Timeout: c.dnsTimeout},
 			"<nonce>."+c.zone, c.dnsInterval, c.dnsTimeout,
 			params(map[string]string{"resolver": addr, "zone": c.zone})); err != nil {
@@ -119,11 +108,46 @@ func buildJobs(ctx context.Context, st *store.Store, c probeConfig, now time.Tim
 	}
 	for _, u := range c.udps {
 		addr := u.Addr.String()
-		if err := add(u.Label, u.Addr.Addr().String(),
+		if err := add(dev(u.Label, u.Addr.Addr().String()),
 			probe.UDPEcho{Addr: addr, Count: udpBurstCount, Spacing: udpBurstSpacing, Wait: c.udpWait},
 			addr, c.udpInterval, udpBurstCount*udpBurstSpacing+c.udpWait,
 			params(map[string]any{"count": udpBurstCount, "spacingMs": udpBurstSpacing.Milliseconds(), "bytes": 64})); err != nil {
 			return nil, err
+		}
+	}
+	for _, e := range c.endpoints {
+		ep := store.Endpoint{Label: e.Label, Host: e.IP, Region: e.Region, Owner: c.owner}
+		epPool, epPin, err := endpoints.ParsePin([]byte(e.CertPEM))
+		if err != nil {
+			return nil, fmt.Errorf("endpoint %s: %w", e.Label, err)
+		}
+		addr := e.TCPAddr()
+		if err := add(ep, probe.TCPConnect{Addr: addr, Timeout: c.tcpTimeout},
+			addr, c.tcpInterval, c.tcpTimeout, ""); err != nil {
+			return nil, err
+		}
+		url := "https://" + addr + "/p"
+		if err := add(ep,
+			probe.HTTPSGet{URL: url, ServerName: e.ServerName, RootCAs: epPool, Timeout: c.httpsTimeout},
+			url, c.httpsInterval, c.httpsTimeout,
+			params(map[string]string{"serverName": e.ServerName, "rootCA": "pinned:" + epPin})); err != nil {
+			return nil, err
+		}
+		if e.DNSZone != "" {
+			if err := add(ep, probe.DNSResolve{Zone: e.DNSZone, Timeout: c.dnsTimeout},
+				"<nonce>."+e.DNSZone, c.dnsInterval, c.dnsTimeout,
+				params(map[string]string{"resolver": "sistema", "zone": e.DNSZone})); err != nil {
+				return nil, err
+			}
+		}
+		if e.UDPPort != 0 {
+			udp := e.UDPAddr()
+			if err := add(ep,
+				probe.UDPEcho{Addr: udp, Count: udpBurstCount, Spacing: udpBurstSpacing, Wait: c.udpWait},
+				udp, c.udpInterval, udpBurstCount*udpBurstSpacing+c.udpWait,
+				params(map[string]any{"count": udpBurstCount, "spacingMs": udpBurstSpacing.Milliseconds(), "bytes": 64})); err != nil {
+				return nil, err
+			}
 		}
 	}
 	return jobs, nil

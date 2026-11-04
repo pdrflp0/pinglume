@@ -4,6 +4,34 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); 
 
 ## [Não publicado]
 
+## [0.8.0] - 2026-11-03
+
+Fatia F13: tudo o que falta do lado do código para os endpoints irem ao ar sem custo. Nada está hospedado ainda. A lista de produção vem vazia, então este binário continua medindo só o testbed; ela será preenchida depois que as VMs existirem.
+
+### Adicionado
+
+- Lista de endpoints de produção embutida no agente (`agent/internal/endpoints/production.json`): IP, portas, região, nome verificado e certificado fixado de cada endpoint. `pinglume run` sem opções de desenvolvimento usa essa lista.
+- Endereços públicos só entram por essa lista. A lista recusa loopback e rede privada; as opções de desenvolvimento continuam recusando endereços públicos.
+- `--dev-endpoints`: usa um arquivo no formato da lista de produção, só com loopback ou rede privada, para ensaiar o caminho de produção sem servidor público.
+- Campo opcional `dns_zone`, que liga a sonda DNS pelo resolvedor do sistema quando existir um domínio. Tem teste unitário, mas não rodou contra um domínio real.
+- `probe-server`: `-print-endpoint` gera a entrada da lista a partir do certificado instalado, `-cert-years` define a validade e `-udp-max-pps` limita os ecos no total (padrão 2000/s), somando todos os IPs.
+- `probe-server`: limite de conexões simultâneas (256 no total e 32 por IP) e tempos máximos de leitura, escrita e inatividade para ficar exposto na internet.
+- `deploy/`: serviço `systemd` com usuário próprio e permissões restritas, instalador e `deploy.sh`, que instala, testa HTTPS e UDP a partir do Mac e grava o endpoint na lista.
+- [docs/hospedagem.md](docs/hospedagem.md): passo a passo de contas, VMs, firewall e instalação, com os riscos de custo de cada provedor.
+
+### Alterado
+
+- Plano de hospedagem definido no documento de desenho: dois endpoints sem custo (Oracle em São Paulo e Google em `us-east1`) e sem domínio por enquanto, em vez de três.
+
+### Testado
+
+- Agente e `probe-server` locais no formato da lista de produção, com certificado fixado e nome `.invalid`: TCP, HTTPS e UDP todos `ok` em ensaio curto.
+- Instalador em contêiner Ubuntu 24.04 arm64 com `systemd` e regras `iptables` no estilo das imagens da Oracle.
+
+### Não testado
+
+- Nenhuma VM real da Oracle ou do Google, nem tráfego pela internet pública. `deploy.sh` ainda não rodou de ponta a ponta.
+
 ## [0.7.0] - 2026-11-03
 
 Fatia F12: sonda UDP de perda de datagramas e jitter, no ritmo de áudio de chamada. Com ela as 12 fatias do Nível 1 estão feitas. O agente continua medindo só o testbed local: os endpoints próprios ainda não estão hospedados, e isso é pré-requisito para uso real.
