@@ -150,7 +150,7 @@ Todos os IDs são ULID (ordenáveis por tempo, gerados localmente, estáveis par
 
 - Go, um binário: `GET /p` (HTTPS), eco UDP com limite por IP, DNS curinga (autoritativo próprio ou provedor com suporte a curinga).
 - Rate limit por IP; logs de IP com retenção curta e documentada.
-- Hospedagem: **adiada**. Desenvolvimento e testes de F1–F11 usam `testbed/` local com falhas injetadas.
+- Hospedagem: plano em [hospedagem.md](hospedagem.md), com dois endpoints sem custo. Desenvolvimento e testes de F1–F12 usam `testbed/` local com falhas injetadas.
 
 ### 4.4 Orçamento de tráfego [EST — metas, não resultados]
 
@@ -304,5 +304,5 @@ Nada abaixo é executado sem instrução explícita.
 | Instalar Go | Feito: Go 1.27.3 via Homebrew |
 | Local do repositório | `~/dev/pinglume` |
 | Sonda `udp_echo` | Aceita, fatia F12, começa restrita |
-| Hospedagem dos endpoints e domínio | Adiada; só `testbed/` local até a medição real |
+| Hospedagem dos endpoints e domínio | Dois endpoints sem custo (Oracle São Paulo, Google `us-east1`), sem domínio por enquanto; ver [hospedagem.md](hospedagem.md) |
 | Licença do repositório | Em aberto |
