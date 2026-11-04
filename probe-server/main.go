@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"flag"
+	"fmt"
 	"io"
 	"log"
 	"log/slog"
@@ -19,6 +20,11 @@ import (
 	"time"
 )
 
+const (
+	maxConns      = 256
+	maxConnsPerIP = 32
+)
+
 var payload = []byte(strings.Repeat("pinglume-probe-v1 ", 4)[:63] + "\n")
 
 func main() {
@@ -30,6 +36,11 @@ func main() {
 	adminAddr := flag.String("admin", "127.0.0.1:9900", "API de falhas (só loopback; vazio desativa)")
 	tlsDir := flag.String("tls-dir", "testbed/tls", "onde fica o certificado do testbed")
 	serverName := flag.String("server-name", "probe.pinglume.test", "nome no certificado")
+	certYears := flag.Int("cert-years", 2, "validade em anos do certificado criado")
+	udpGlobal := flag.Int("udp-max-pps", 2000, "datagramas ecoados por segundo no total, somando todos os IPs")
+	printLabel := flag.String("print-endpoint", "", "imprime a entrada deste rótulo na lista de produção do agente e sai")
+	publicIP := flag.String("public-ip", "", "IP público usado por -print-endpoint")
+	region := flag.String("region", "", "região usada por -print-endpoint")
 	initial := flag.String("faults", "", `estado inicial em JSON, ex.: {"dns":"drop"}`)
 	flag.Parse()
 
@@ -37,6 +48,15 @@ func main() {
 	fail := func(msg string, err error) {
 		logger.Error(msg, "err", err)
 		os.Exit(1)
+	}
+
+	if *printLabel != "" {
+		line, err := endpointEntry(*tlsDir, *printLabel, *region, *publicIP, *serverName, *addr, *udpAddr)
+		if err != nil {
+			fail("-print-endpoint", err)
+		}
+		fmt.Println(line)
+		return
 	}
 
 	faults := &Faults{f: defaultFaults()}
@@ -50,7 +70,7 @@ func main() {
 		}
 	}
 
-	cert, certPath, err := loadOrCreateCert(*tlsDir, *serverName)
+	cert, certPath, err := loadOrCreateCert(*tlsDir, *serverName, *certYears)
 	if err != nil {
 		fail("certificado", err)
 	}
@@ -66,6 +86,10 @@ func main() {
 		http: &http.Server{
 			Handler:           probeHandler(faults),
 			ReadHeaderTimeout: 5 * time.Second,
+			ReadTimeout:       10 * time.Second,
+			WriteTimeout:      30 * time.Second,
+			IdleTimeout:       10 * time.Second,
+			MaxHeaderBytes:    4 << 10,
 
 			ErrorLog: log.New(io.Discard, "", 0),
 		},
@@ -88,7 +112,7 @@ func main() {
 		if err != nil {
 			fail("escuta UDP", err)
 		}
-		go serveUDPEcho(pc, faults)
+		go serveUDPEcho(pc, faults, *udpGlobal)
 	}
 
 	if *adminAddr != "" {
@@ -137,7 +161,7 @@ func (p *probeServer) apply(s FaultState) error {
 			return err
 		}
 		p.ln = ln
-		go p.http.Serve(tls.NewListener(ln, p.tlsConf))
+		go p.http.Serve(tls.NewListener(newConnLimiter(ln, maxConns, maxConnsPerIP), p.tlsConf))
 	}
 	return nil
 }

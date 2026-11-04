@@ -1,0 +1,30 @@
+[Unit]
+Description=Pinglume probe-server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=pinglume
+EnvironmentFile=/etc/pinglume-probe.env
+ExecStart=/usr/local/bin/pinglume-probe-server $PROBE_ARGS
+StateDirectory=pinglume-probe
+StateDirectoryMode=0700
+Restart=always
+RestartSec=2
+MemoryMax=128M
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target
