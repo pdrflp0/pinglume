@@ -19,6 +19,7 @@ import (
 	"pinglume/agent/internal/api"
 	"pinglume/agent/internal/clock"
 	"pinglume/agent/internal/coverage"
+	"pinglume/agent/internal/endpoints"
 	"pinglume/agent/internal/lock"
 	"pinglume/agent/internal/netctx"
 	"pinglume/agent/internal/retention"
@@ -101,12 +102,12 @@ func cmdRun(args []string) error {
 	fs.Var(&cfg.udps, "dev-udp", "eco UDP de desenvolvimento label=ip:porta (repetível)")
 	fs.DurationVar(&cfg.udpInterval, "udp-interval", 15*time.Second, "intervalo entre rajadas UDP")
 	fs.DurationVar(&cfg.udpWait, "udp-wait", time.Second, "espera pelos ecos depois do último datagrama da rajada")
+	devEndpoints := fs.String("dev-endpoints", "", "arquivo JSON no formato da lista de produção, só com loopback ou rede privada")
 	fs.Parse(args)
 	c.resolve()
 
-	if len(cfg.targets) == 0 && len(cfg.resolvers) == 0 && len(cfg.udps) == 0 {
-		return errors.New("nenhum endpoint configurado: os endpoints próprios ainda não estão hospedados; " +
-			"use --dev-target/--dev-dns/--dev-udp com o probe-server local (veja README)")
+	if err := cfg.loadEndpoints(*devEndpoints); err != nil {
+		return err
 	}
 	if err := cfg.validate(); err != nil {
 		return err
@@ -121,6 +122,31 @@ func cmdRun(args []string) error {
 			return buildJobs(ctx, st, cfg, now)
 		},
 		net: &netctx.System{}})
+}
+
+func (c *probeConfig) loadEndpoints(devFile string) error {
+	var err error
+	switch {
+	case devFile != "":
+		var b []byte
+		if b, err = os.ReadFile(devFile); err != nil {
+			return fmt.Errorf("--dev-endpoints: %w", err)
+		}
+		c.owner = "dev"
+		if c.endpoints, err = endpoints.Parse(b, endpoints.Local); err != nil {
+			return fmt.Errorf("--dev-endpoints: %w", err)
+		}
+	case len(c.targets) == 0 && len(c.resolvers) == 0 && len(c.udps) == 0:
+		c.owner = "pinglume"
+		if c.endpoints, err = endpoints.Production(); err != nil {
+			return err
+		}
+	}
+	if err == nil && len(c.endpoints) == 0 && len(c.targets) == 0 && len(c.resolvers) == 0 && len(c.udps) == 0 {
+		return errors.New("nenhum endpoint configurado: este binário não traz endpoints de produção; " +
+			"use --dev-target/--dev-dns/--dev-udp com o probe-server local (veja README)")
+	}
+	return err
 }
 
 type agentOptions struct {
