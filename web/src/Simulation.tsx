@@ -20,6 +20,7 @@ export function SimulationBanner() {
   useEffect(() => {
     const base = "Pinglume";
     document.title = demo ? `[SIMULAÇÃO] ${base}` : base;
+    document.documentElement.dataset.demo = demo ? "1" : "";
   }, [demo]);
   if (!demo) return null;
   return (
