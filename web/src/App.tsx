@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import {
   api,
   ApiError,
@@ -9,9 +9,11 @@ import {
   type StorageInfo,
   type Timeline as TimelineData,
 } from "./api";
+import { Mark } from "./Brand";
 import { ComparisonCard } from "./Comparison";
 import { DataTable } from "./DataTable";
 import { ExportCard } from "./Export";
+import { Hero } from "./Hero";
 import { IncidentsCard, ReportDialog } from "./Incidents";
 import {
   clock,
@@ -28,6 +30,7 @@ import {
   until,
 } from "./format";
 import { pan, PRESETS, resolve, select, toQuery, zoom, type ViewRange } from "./range";
+import { Rail } from "./Rail";
 import { rangeLabel } from "./scale";
 import { Timeline } from "./Timeline";
 
@@ -130,134 +133,139 @@ export function App() {
   const shown = resolve(range, now);
 
   return (
-    <div className="page">
-      <header className="top">
-        <div className="brand">
-          <span className="logo" aria-hidden="true" />
-          <h1>Pinglume</h1>
+    <div className="shell">
+      <Rail measuring={!offline && data.state === "measuring"} />
+      <div className="stage">
+        <header className="topbar">
+          <div>
+            <h1 className="sr-only">Pinglume</h1>
+            <p className="eyebrow">Monitor local de conexão</p>
+          </div>
+          <div className="top-actions">
+            <button className="btn btn-report" onClick={() => setReporting(true)} disabled={offline}>
+              Travou agora
+            </button>
+            <button className="btn-ghost" onClick={toggle} disabled={busy || offline}>
+              {busy ? "Aplicando…" : paused ? "Retomar medição" : "Pausar medição"}
+            </button>
+          </div>
+        </header>
+
+        <div className="sr-only" aria-live="polite">
+          {announcement}
         </div>
-        <div className="top-actions">
-          <StateChip state={offline ? null : data.state} />
-          <button className="btn btn-report" onClick={() => setReporting(true)} disabled={offline}>
-            Travou agora
-          </button>
-          <button className="btn-ghost" onClick={toggle} disabled={busy || offline}>
-            {busy ? "Aplicando…" : paused ? "Retomar medição" : "Pausar medição"}
-          </button>
-        </div>
-      </header>
 
-      <div className="sr-only" aria-live="polite">
-        {announcement}
-      </div>
-
-      <ReportDialog
-        open={reporting}
-        onClose={() => setReporting(false)}
-        onCreated={(d) => {
-          setReporting(false);
-          setSelectedIncident(d.incident.id);
-          setAnnouncement(
-            `Relato registrado às ${clock(d.incident.reportedAt)}. A análise fica pronta às ${clock(d.analysis.windowTo)}.`,
-          );
-          refresh();
-        }}
-      />
-
-      {offline && (
-        <div className="banner banner-warn" role="status">
-          <strong>Sem contato com o agente desde {clock(failure.since.toISOString())}.</strong> Os números abaixo são
-          da última leitura ({clock(data.now)}) e não estão sendo atualizados. {failure.message}
-        </div>
-      )}
-      {actionError && (
-        <div className="banner banner-error" role="alert">
-          Não foi possível mudar o estado: {actionError}
-        </div>
-      )}
-
-      <RangeBar
-        range={range}
-        label={rangeLabel(shown.from, shown.to)}
-        onChange={setRange}
-        onZoom={(f) => setRange(zoom(range, now, f))}
-        onPan={(f) => setRange(pan(range, now, f))}
-      />
-
-      <main>
-        <section aria-labelledby="tl-title" className="card">
-          <h2 id="tl-title">Linha do tempo</h2>
-          {timeline && (
-            <>
-              <Timeline
-                data={timeline}
-                incidents={incidents}
-                onIncident={setSelectedIncident}
-                onSelect={(a, b) => setRange(select(a, b, now))}
-                onZoom={(f, c) => setRange(zoom(range, now, f, c))}
-                onPan={(f) => setRange(pan(range, now, f))}
-                onLive={() => setRange({ live: true, spanMs: PRESETS[0].spanMs })}
-              />
-              <DataTable data={timeline} />
-            </>
-          )}
-        </section>
-
-        <IncidentsCard
-          items={incidents}
-          selected={selectedIncident}
-          onSelect={setSelectedIncident}
-          onDeleted={() => {
-            setSelectedIncident(null);
-            setAnnouncement("Relato apagado.");
+        <ReportDialog
+          open={reporting}
+          onClose={() => setReporting(false)}
+          onCreated={(d) => {
+            setReporting(false);
+            setSelectedIncident(d.incident.id);
+            setAnnouncement(
+              `Relato registrado às ${clock(d.incident.reportedAt)}. A análise fica pronta às ${clock(d.analysis.windowTo)}.`,
+            );
             refresh();
           }}
         />
 
-        <ComparisonCard />
-
-        <section aria-labelledby="cov-title" className="card">
-          <h2 id="cov-title">Cobertura</h2>
-          <p className="muted">
-            Tempo em que o agente estava (ou não) medindo no período exibido. Período sem medição não indica conexão
-            boa nem queda.
-          </p>
-          <CoverageBar stateMs={data.summary.stateMs} />
-          <GapList gaps={data.summary.gaps} />
-        </section>
-
-        <section aria-labelledby="probes-title" className="card">
-          <h2 id="probes-title">Sondas</h2>
-          <ProbeTable probes={data.summary.probes} />
-        </section>
-
-        <ExportCard from={shown.from} to={shown.to} />
-      </main>
-
-      <footer className="foot muted">
-        Agente {data.agentVersion} · atualiza a cada {POLL_MS / 1000} s · dados somente neste computador
-        {storage && (
-          <>
-            {" "}
-            · banco {megabytes(storage.usage.usedBytes)}
-            {storage.limitBytes > 0 && <> de {megabytes(storage.limitBytes)}</>} · medições brutas guardadas por{" "}
-            {duration(storage.rawRetentionMs)}, agregados por {duration(storage.aggregateRetentionMs)}
-          </>
+        {offline && (
+          <div className="banner banner-warn" role="status">
+            <strong>Sem contato com o agente desde {clock(failure.since.toISOString())}.</strong> Os números abaixo são
+            da última leitura ({clock(data.now)}) e não estão sendo atualizados. {failure.message}
+          </div>
         )}
-      </footer>
-    </div>
-  );
-}
+        {actionError && (
+          <div className="banner banner-error" role="alert">
+            Não foi possível mudar o estado: {actionError}
+          </div>
+        )}
 
-function StateChip({ state }: { state: CoverageState | null }) {
-  if (state === null) {
-    return <span className="chip chip-unknown">Estado desconhecido</span>;
-  }
-  return (
-    <span className={`chip chip-${state}`}>
-      <span className="chip-dot" aria-hidden="true" />
-      {stateLabel[state]}
-    </span>
+        <main className="grid">
+          <div className="slot s-visao" id="visao">
+            <Hero status={data} reports={incidents.length} offline={offline} />
+          </div>
+
+          <div className="slot s-tempo" id="tempo">
+            <RangeBar
+              range={range}
+              label={rangeLabel(shown.from, shown.to)}
+              onChange={setRange}
+              onZoom={(f) => setRange(zoom(range, now, f))}
+              onPan={(f) => setRange(pan(range, now, f))}
+            />
+            <section aria-labelledby="tl-title" className="card reveal" style={{ "--i": 3 } as CSSProperties}>
+              <h2 id="tl-title">Linha do tempo</h2>
+              {timeline && (
+                <>
+                  <Timeline
+                    data={timeline}
+                    incidents={incidents}
+                    onIncident={setSelectedIncident}
+                    onSelect={(a, b) => setRange(select(a, b, now))}
+                    onZoom={(f, c) => setRange(zoom(range, now, f, c))}
+                    onPan={(f) => setRange(pan(range, now, f))}
+                    onLive={() => setRange({ live: true, spanMs: PRESETS[0].spanMs })}
+                  />
+                  <DataTable data={timeline} />
+                </>
+              )}
+            </section>
+          </div>
+
+          <div className="slot s-relatos" id="relatos">
+            <IncidentsCard
+              items={incidents}
+              selected={selectedIncident}
+              onSelect={setSelectedIncident}
+              onDeleted={() => {
+                setSelectedIncident(null);
+                setAnnouncement("Relato apagado.");
+                refresh();
+              }}
+            />
+          </div>
+
+          <div className="slot s-comparacao" id="comparacao">
+            <ComparisonCard />
+          </div>
+
+          <div className="slot s-cobertura" id="cobertura">
+            <section aria-labelledby="cov-title" className="card">
+              <h2 id="cov-title">Cobertura</h2>
+              <p className="muted">
+                Tempo em que o agente estava (ou não) medindo no período exibido. Período sem medição não indica
+                conexão boa nem queda.
+              </p>
+              <CoverageBar stateMs={data.summary.stateMs} />
+              <GapList gaps={data.summary.gaps} />
+            </section>
+          </div>
+
+          <div className="slot s-exportar" id="exportar">
+            <ExportCard from={shown.from} to={shown.to} />
+          </div>
+
+          <div className="slot s-sondas" id="sondas">
+            <section aria-labelledby="probes-title" className="card">
+              <h2 id="probes-title">Sondas</h2>
+              <ProbeTable probes={data.summary.probes} />
+            </section>
+          </div>
+        </main>
+
+        <footer className="foot muted">
+          Agente {data.agentVersion} · atualiza a cada {POLL_MS / 1000} s · dados somente neste computador
+          {storage && (
+            <>
+              {" "}
+              · banco {megabytes(storage.usage.usedBytes)}
+              {storage.limitBytes > 0 && <> de {megabytes(storage.limitBytes)}</>} · medições brutas guardadas por{" "}
+              {duration(storage.rawRetentionMs)}, agregados por {duration(storage.aggregateRetentionMs)}
+            </>
+          )}
+        </footer>
+      </div>
+    </div>
   );
 }
 
@@ -466,7 +474,7 @@ function Centered({ title, children }: { title: string; children?: ReactNode }) 
     <main className="centered">
       <div className="card narrow">
         <div className="brand">
-          <span className="logo" aria-hidden="true" />
+          <Mark size={34} />
           <h1>{title}</h1>
         </div>
         {children}

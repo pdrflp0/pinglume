@@ -284,6 +284,7 @@ Revisitar o recorte se um concorrente já fizer a comparação guiada tão bem q
 | F12 | `udp_echo` | Perda injetada é detectada; rótulo correto |
 | F13 | Endpoints de produção | Lista embutida com certificado fixado; endereço público só pela lista; instalação ensaiada em Ubuntu |
 | F14 | `pinglume compare` | Fluxo A → B completo pela CLI, com as mesmas regras e o mesmo resultado do dashboard |
+| F15 | Dashboard redesenhado | Mesma API e mesmos textos; testes de interface sem alteração; animações respeitam `prefers-reduced-motion`; fontes embutidas, sem rede |
 
 Nível 2 será detalhado depois que o Nível 1 rodar com uso real.
 
