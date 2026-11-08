@@ -282,6 +282,8 @@ Revisitar o recorte se um concorrente já fizer a comparação guiada tão bem q
 | F10 | Modo demo | Banco separado, faixa "SIMULAÇÃO" em telas e exportação |
 | F11 | Medição de recursos | CPU, memória, disco e bytes/h medidos 24 h no Mac de referência e publicados |
 | F12 | `udp_echo` | Perda injetada é detectada; rótulo correto |
+| F13 | Endpoints de produção | Lista embutida com certificado fixado; endereço público só pela lista; instalação ensaiada em Ubuntu |
+| F14 | `pinglume compare` | Fluxo A → B completo pela CLI, com as mesmas regras e o mesmo resultado do dashboard |
 
 Nível 2 será detalhado depois que o Nível 1 rodar com uso real.
 
