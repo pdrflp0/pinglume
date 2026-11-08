@@ -13,6 +13,7 @@ Registradas quando instaladas ou adicionadas. Atualizar esta tabela junto com a 
 | Vite / @vitejs/plugin-react | 8.3.4 / 6.1.2 | idem | 20/10/2026 |
 | TypeScript | 7.0.2 | idem | 20/10/2026 |
 | Vitest / Testing Library / jsdom | 5.0.5 / 16.3.3 / 30.1.3 | idem | 20/10/2026 |
+| @fontsource-variable/instrument-sans, @fontsource-variable/geist-mono (fontes embutidas no dashboard) | 5.3.0 | `web/package.json` (versões exatas) + `package-lock.json` | 08/11/2026 |
 | Docker (só desenvolvimento/testbed) | 29.7.2 | — | 20/10/2026 |
 
 Ambiente de referência: macOS 26.6.2 (25G83), Apple Silicon.

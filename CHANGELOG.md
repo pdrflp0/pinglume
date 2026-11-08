@@ -4,6 +4,35 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); 
 
 ## [Não publicado]
 
+## [0.10.0] - 2026-11-08
+
+Fatia F15: o dashboard foi redesenhado. Só a camada visual e a organização da tela mudam: API, banco, regras de análise e textos dos resultados continuam os mesmos, e os testes de interface existentes passam sem alteração.
+
+### Adicionado
+
+- Identidade visual própria: marca (um ponto com anel de "ping" e rastro), paleta grafite com âmbar no tema escuro e papel com tinta no tema claro, painéis com cantos marcados e seções numeradas.
+- Tipografia embutida no binário (Instrument Sans e Geist Mono, 53 kB no total, licença OFL 1.1 segundo o `package.json` de cada pacote): nada é carregado da internet, e a política de segurança do agente continua sem exceções.
+- Menu lateral com as seções do painel e destaque da seção visível; em telas estreitas vira uma faixa rolável.
+- Painel de abertura com o estado do agente em destaque, um traço de pulso animado (corre quando está medindo, fica reto e tracejado quando não está) e quatro métricas do período: tempo medindo, execuções ok, mediana mais alta e relatos. Os valores vêm do mesmo resumo que a tabela de sondas usa, sem consulta nova.
+- Blocos em grade de 12 colunas: relatos e comparação lado a lado, cobertura e exportação lado a lado, linha do tempo e sondas em largura total.
+- Animações: entrada escalonada dos blocos, contagem das métricas, varredura de revelação da linha do tempo, pulso da marca e do indicador de estado. Todas respeitam `prefers-reduced-motion`.
+- Teste unitário do cálculo das métricas de abertura (`headline`).
+
+### Alterado
+
+- Marcas de relato na linha do tempo e falhas passam a usar vermelho; o cursor da linha do tempo usa âmbar.
+- Faixa de simulação com listras e altura fixa; em celular ela quebra linha.
+
+### Testado
+
+- 26 testes de interface (24 anteriores, sem mudança, e 2 novos), verificação de tipos e `go vet`.
+- Conferido no navegador embutido do app com o modo de demonstração: tema escuro, tema claro, diálogo "Travou agora", rolagem pelas seções e largura de celular (390 px).
+
+### Não testado
+
+- Safari e Firefox; leitor de tela; contraste das cores medido por ferramenta (as cores foram escolhidas à vista, não aferidas contra WCAG).
+- Desempenho das animações em máquinas lentas.
+
 ## [0.9.0] - 2026-11-08
 
 Fatia F14: a comparação guiada passa a existir também na CLI. Nada muda no cálculo (`compare-v1`) nem na API local: o comando só conversa com os mesmos endpoints que o dashboard usa. Não depende de hospedagem, e o agente continua medindo só o testbed enquanto os endpoints de produção não estiverem no ar.
