@@ -23,6 +23,7 @@ Ferramenta local para investigar falhas intermitentes de internet durante chamad
 | F12 sonda UDP de perda e jitter | feito e testado |
 | F13 endpoints de produção: lista embutida, certificado fixado, serviço e instalador | feito e ensaiado localmente; falta hospedar ([roteiro](docs/hospedagem.md)) |
 | F14 comando `pinglume compare` (comparação guiada pela CLI) | feito e testado |
+| F15 dashboard redesenhado: marca, tema escuro e claro, painel de abertura, grade de blocos e animações | feito e testado |
 | Nível 2 em diante | ver backlog no documento de desenho |
 
 ## Rodar localmente
