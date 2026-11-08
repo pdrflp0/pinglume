@@ -22,6 +22,7 @@ Ferramenta local para investigar falhas intermitentes de internet durante chamad
 | F11 medição de recursos (CPU, memória, tráfego, disco) | feito: [24 h sem UDP](docs/medicoes-recursos.md), [30 min com UDP](docs/medicoes-recursos-udp.md) |
 | F12 sonda UDP de perda e jitter | feito e testado |
 | F13 endpoints de produção: lista embutida, certificado fixado, serviço e instalador | feito e ensaiado localmente; falta hospedar ([roteiro](docs/hospedagem.md)) |
+| F14 comando `pinglume compare` (comparação guiada pela CLI) | feito e testado |
 | Nível 2 em diante | ver backlog no documento de desenho |
 
 ## Rodar localmente
@@ -77,6 +78,18 @@ A análise (regra `incident-v1`) olha as medições de 5 min antes a 1 min depoi
 ### Comparação guiada
 
 No dashboard, **Nova comparação** mede uma janela A (como está), pede a mudança (ex.: cabo no lugar do Wi-Fi) e mede uma janela B. Cada janela registra a condição declarada e a interface detectada (rota padrão + `networksetup`, só leitura).
+
+O mesmo fluxo existe na CLI, com o agente rodando e o computador acordado durante as duas janelas:
+
+```bash
+pinglume compare new --question "o cabo melhora as quedas?" --change "trocar o Wi-Fi pelo cabo" --window 10m --condition "Wi-Fi, sala"
+```
+
+```bash
+pinglume compare next --condition "cabo, sala"
+```
+
+`compare next` só funciona depois que a janela A terminou. `compare status` mostra a etapa, o tempo que falta e, ao fim, o resultado com as mesmas observações, explicações alternativas, próximo teste e limites do dashboard; `compare cancel` encerra uma comparação em andamento. Só uma comparação pode estar em andamento por vez.
 
 A regra `compare-v1`:
 
@@ -191,7 +204,6 @@ Branches, versionamento (SemVer) e convenção de commits: [docs/fluxo-git.md](d
 - A `incident-v1` ainda não usa o tipo de rede: a linha de base compara com as 2 h anteriores mesmo que a rede tenha mudado (os eventos `net_change` já são gravados).
 - A comparação tem uma rodada A→B: mudança e horário se confundem, e o resultado sempre diz isso. Blocos repetidos (A-B-A) ficam para o Nível 2.
 - A detecção de rede só existe no macOS; em outras plataformas a condição é apenas a declarada.
-- Ainda não há comando de CLI para a comparação; ela é feita pelo dashboard (ou direto pela API).
 - A redação reconhece padrões (e-mail, IP, MAC, telefone, nome do computador). Nomes de outras pessoas escritos em texto livre não são detectáveis; por isso observações ficam fora por padrão.
 - O p95 de períodos compactados é estimado a partir do p95 de cada minuto e tende a sair acima do real.
 - `VACUUM` bloqueia gravações enquanto roda; ele só é usado quando há mais de 25% de espaço livre no arquivo ou o limite foi ultrapassado.

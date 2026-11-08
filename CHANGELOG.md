@@ -4,6 +4,30 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); 
 
 ## [Não publicado]
 
+## [0.9.0] - 2026-11-08
+
+Fatia F14: a comparação guiada passa a existir também na CLI. Nada muda no cálculo (`compare-v1`) nem na API local: o comando só conversa com os mesmos endpoints que o dashboard usa. Não depende de hospedagem, e o agente continua medindo só o testbed enquanto os endpoints de produção não estiverem no ar.
+
+### Adicionado
+
+- `pinglume compare new` abre a janela A com a pergunta, a mudança testada, a duração (`--window`, de 10m a 60m em minutos inteiros) e a condição declarada; recusa duração fora do intervalo antes de chamar o agente.
+- `pinglume compare next` abre a janela B da comparação mais recente, com a condição da janela B.
+- `pinglume compare status` mostra etapa, janelas, condições declaradas e detectadas, tempo restante e, ao fim, o resultado: veredito por sonda, observações com seus dados de origem, outras explicações possíveis, próximo teste e limites. Aceita `--id` para ver uma comparação antiga.
+- `pinglume compare cancel` encerra a comparação em andamento.
+
+### Removido
+
+- A ressalva do README de que a comparação só existia no dashboard.
+
+### Testado
+
+- Testes da CLI contra um agente simulado: corpo enviado, escolha da comparação mais recente, validação das janelas sem chamar o agente, texto do resultado e ausência de "faltam" em janelas já concluídas.
+- Ensaio real de 21 min com o agente e um `probe-server` local em loopback, janelas de 10 min e "nada muda" como mudança: `new`, `status`, `next` recusado antes da hora (409), `next`, `status` final e `cancel` recusado depois de concluída (409) se comportaram como o esperado. O resultado saiu "inconclusivo" (TCP sem diferença detectável; HTTPS inconclusivo, com 10 execuções por janela). Isso valida o fluxo da CLI, não a regra: foi uma única rodada sem mudança real.
+
+### Não testado
+
+- Comparação com mudança real de rede (Wi-Fi para cabo) pela CLI.
+
 ## [0.8.0] - 2026-11-03
 
 Fatia F13: tudo o que falta do lado do código para os endpoints irem ao ar sem custo. Nada está hospedado ainda. A lista de produção vem vazia, então este binário continua medindo só o testbed; ela será preenchida depois que as VMs existirem.
